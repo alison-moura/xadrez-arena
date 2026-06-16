@@ -6,14 +6,13 @@ import type { MatchStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-// Stake limit: novatos (< 5 partidas finalizadas) limitados a 100 coins por aposta
-const NOVICE_MATCH_THRESHOLD = 5;
-const NOVICE_MAX_WAGER = 100;
+const NOVICE_MATCH_THRESHOLD = 10;  // games_played threshold (ELO provisional period)
+const NOVICE_MAX_WAGER       = 100;
 
 const createSchema = z.object({
-  wager: z.number().int().min(0).max(1_000_000),
+  wager:          z.number().int().min(0).max(1_000_000),
   preferredColor: z.enum(["w", "b", "random"]).default("random"),
-  ratingRange: z.enum(["100", "200", "500", "open"]).optional(),
+  ratingRange:    z.enum(["100", "200", "500", "open"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -56,48 +55,42 @@ export async function POST(req: Request) {
 
   const { wager, preferredColor, ratingRange } = parsed.data;
 
-  // Stake limit: check how many finished matches the user has
-  if (wager > NOVICE_MAX_WAGER) {
-    const { count } = await supabase
-      .from("chess_matches")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "FINISHED")
-      .is("bot_difficulty", null)
-      .or(`white_user_id.eq.${session.user.id},black_user_id.eq.${session.user.id}`);
+  // Fetch user data once for all checks
+  const { data: userRow } = await supabase
+    .from("chess_users")
+    .select("rating, games_played, banned_at")
+    .eq("id", session.user.id)
+    .single();
 
-    if ((count ?? 0) < NOVICE_MATCH_THRESHOLD) {
-      return NextResponse.json(
-        {
-          error: `Novos jogadores só podem apostar até ${NOVICE_MAX_WAGER} coins nas primeiras ${NOVICE_MATCH_THRESHOLD} partidas.`,
-          novice_limit: true,
-        },
-        { status: 400 }
-      );
-    }
+  if (userRow?.banned_at) {
+    return NextResponse.json({ error: "Sua conta está banida." }, { status: 403 });
+  }
+
+  // Stake limit: players in provisional period (< 10 games) limited to 100 coins
+  if (wager > NOVICE_MAX_WAGER && (userRow?.games_played ?? 0) < NOVICE_MATCH_THRESHOLD) {
+    return NextResponse.json(
+      {
+        error: `Novos jogadores só podem apostar até ${NOVICE_MAX_WAGER} coins nas primeiras ${NOVICE_MATCH_THRESHOLD} partidas.`,
+        novice_limit: true,
+      },
+      { status: 400 }
+    );
   }
 
   // Compute rating range bounds
   let ratingMin: number | null = null;
   let ratingMax: number | null = null;
 
-  if (ratingRange && ratingRange !== "open") {
-    const { data: userRow } = await supabase
-      .from("chess_users")
-      .select("rating")
-      .eq("id", session.user.id)
-      .single();
-
-    if (userRow) {
-      const spread = Number(ratingRange);
-      ratingMin = userRow.rating - spread;
-      ratingMax = userRow.rating + spread;
-    }
+  if (ratingRange && ratingRange !== "open" && userRow) {
+    const spread = Number(ratingRange);
+    ratingMin = userRow.rating - spread;
+    ratingMax = userRow.rating + spread;
   }
 
   const { data, error } = await supabase.rpc("chess_create_match", {
-    p_user_id: session.user.id,
-    p_wager: wager,
-    p_color: preferredColor,
+    p_user_id:   session.user.id,
+    p_wager:     wager,
+    p_color:     preferredColor,
     p_rating_min: ratingMin,
     p_rating_max: ratingMax,
   });

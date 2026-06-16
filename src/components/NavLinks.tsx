@@ -7,6 +7,7 @@ const NAV = [
   { href: "/history", label: "Histórico" },
   { href: "/leaderboard", label: "Ranking" },
   { href: "/achievements", label: "Conquistas" },
+  { href: "/overwatch", label: "Overwatch" },
   { href: "/wallet", label: "Carteira" },
 ];
 

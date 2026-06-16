@@ -12,8 +12,8 @@ export default async function MatchPage({ params }: { params: { id: string } }) 
     .from("chess_matches")
     .select(
       `*,
-       white_user:white_user_id(id, username, rating),
-       black_user:black_user_id(id, username, rating),
+       white_user:white_user_id(id, username, rating, games_played),
+       black_user:black_user_id(id, username, rating, games_played),
        winner:winner_id(id, username)`
     )
     .eq("id", params.id)
