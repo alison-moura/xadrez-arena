@@ -32,6 +32,27 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Histórico de partidas, transações e saques
 - Ranking de jogadores por rating (atualizado a cada partida finalizada)
 
+### Anti-cheat e matchmaking justo
+- **Faixa de rating obrigatória**: criador define ±200 (Competitivo), ±500 (Relaxado) ou Livre. Jogadores fora do range não podem entrar.
+- **Limite de apostas para novatos**: contas com < 5 partidas finalizadas limitadas a 100 coins por aposta — protege iniciantes de sharks de alto nível.
+- **Análise de movimentos futura**: centipawn loss via Stockfish pós-jogo (TODO) para detectar uso de engine.
+
+### Pré-lance (pre-move)
+- Enquanto o oponente joga, clique sua peça + destino para enfileirar um lance
+- Executa instantaneamente quando o turno volta (como no Chess.com / Lichess)
+- Highlight roxo diferencia do lance normal (dourado)
+- Cancelável via clique direito ou botão "Cancelar"
+
+### Sistema de conquistas (15 achievements)
+- **Partidas**: Primeira Vitória, Veterano, Centurião, Em Chamas (3 seguidas), Imparável (5), Lenda (10)
+- **Xadrez**: Relâmpago (mate em ≤15 lances), Longa Batalha (60+ lances), Diplomata (5 amistosos)
+- **Bot**: Dominador, Exterminador (modo Difícil)
+- **Rating**: Promissor (1200), Expert (1500), Mestre (1800)
+- **Apostas**: Grande Apostador (≥500 coins)
+- Coins de recompensa por conquista (50–500 coins)
+- Toast de notificação no tabuleiro ao desbloquear
+- Página `/achievements` com grid, filtro por categoria e barra de progresso
+
 ### Bot de xadrez
 - 3 dificuldades: Fácil, Médio, Difícil
 - Algoritmo **minimax + alpha-beta pruning** com tabelas PST

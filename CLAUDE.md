@@ -199,6 +199,45 @@ O projeto está no Vercel. Push para `main` deploya automaticamente.
 
 ---
 
+## Pré-lance (pre-move)
+
+Implementado 100% client-side em `MatchClient.tsx`:
+- `premoveRef` (useRef) armazena `{ from, to }` do pré-lance pendente
+- Durante o turno do oponente (`!isMyTurn && isPlayer`), clique na peça própria → destino define o pré-lance
+- `refresh()` verifica `newMatch.turn === myColor && premoveRef.current` → executa imediatamente
+- Highlight roxo (`rgba(120,80,220,...)`) diferencia do highlight de lance normal (dourado)
+- `onSquareRightClick` cancela o pré-lance
+- Pré-lance inválido (peça foi capturada etc.) é descartado silenciosamente no try/catch
+
+## Matchmaking por faixa de rating
+
+- `chess_matches.rating_min / rating_max` — novos campos (NULL = aberto)
+- RPC `chess_create_match` aceita `p_rating_min` e `p_rating_max`
+- RPC `chess_join_match` valida rating do entrante; errors: `rating_too_low`, `rating_too_high`
+- API `POST /api/matches` aceita `ratingRange: "200" | "500" | "open"`
+- Stake limit: `< 5 partidas finalizadas → max wager = 100 coins` (verificado em `POST /api/matches`)
+
+## Sistema de conquistas
+
+### DB (migration 0002)
+- `chess_achievement_types` — 15 conquistas definidas com reward_coins
+- `chess_user_achievements` — junction table user × achievement
+- `chess_grant_achievement(user_id, achievement_id)` — RPC idempotente + transferência de coins
+
+### Flow
+1. Partida termina → `MatchClient` detecta `status === FINISHED`
+2. `POST /api/achievements/check` com `matchId`
+3. API calcula stats (total matches, wins, streak, rating) e chama RPC para cada achievement elegível
+4. Retorna lista de conquistas recém ganhas
+5. Client exibe toast com icon + nome + coins
+
+### Conquistas por categoria
+- **Partidas**: Primeira Vitória, Veterano (10), Centurião (100), Em Chamas (3 seguidas), Imparável (5), Lenda (10)
+- **Xadrez**: Relâmpago (mate ≤ 15 lances), Longa Batalha (60+ lances), Diplomata (5 amistosos)
+- **Bot**: Dominador (vencer qualquer bot), Exterminador (vencer bot Difícil)
+- **Rating**: Promissor (1200), Expert (1500), Mestre (1800)
+- **Apostas**: Grande Apostador (aposta ≥ 500 coins)
+
 ## TODOs de produção
 
 - [ ] Relógio de xadrez (colunas `white_time_ms` / `black_time_ms` em `chess_matches`)
