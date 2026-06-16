@@ -29,17 +29,16 @@ type MatchData = {
   winner: { id: string; username: string } | null;
 };
 
+type EarnedAchievement = { id: string; name: string; icon: string; reward_coins: number };
+
 const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
 const PIECE_ORDER = ["q", "r", "b", "n", "p"];
-const CAPTURED_SYMBOLS: Record<string, string> = {
-  q: "♛", r: "♜", b: "♝", n: "♞", p: "♟",
-};
+const CAPTURED_SYMBOLS: Record<string, string> = { q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
 
 function calcMaterial(chess: Chess) {
   const initial: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
   const onBoard: Record<string, { w: number; b: number }> = {
-    p: { w: 0, b: 0 }, n: { w: 0, b: 0 },
-    b: { w: 0, b: 0 }, r: { w: 0, b: 0 }, q: { w: 0, b: 0 },
+    p: { w: 0, b: 0 }, n: { w: 0, b: 0 }, b: { w: 0, b: 0 }, r: { w: 0, b: 0 }, q: { w: 0, b: 0 },
   };
   for (const row of chess.board()) {
     for (const cell of row) {
@@ -71,7 +70,12 @@ export function MatchClient({
   const [busy, setBusy] = useState(false);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalMoveStyles, setLegalMoveStyles] = useState<Record<string, React.CSSProperties>>({});
+  const [premoveStyles, setPremoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [copied, setCopied] = useState<"fen" | "pgn" | null>(null);
+  const [achievements, setAchievements] = useState<EarnedAchievement[]>([]);
+
+  const premoveRef = useRef<{ from: string; to: string } | null>(null);
+  const achievementCheckedRef = useRef(false);
 
   const isViewerWhite = match.white_user_id === viewerId;
   const isViewerBlack = match.black_user_id === viewerId;
@@ -84,28 +88,80 @@ export function MatchClient({
     try {
       if (match.pgn) c.loadPgn(match.pgn);
       else c.load(match.fen);
-    } catch {
-      c.load(match.fen);
-    }
+    } catch { c.load(match.fen); }
     return c;
   }, [match.fen, match.pgn]);
 
+  // Clear selection on move count change
   useEffect(() => {
     setSelectedSquare(null);
     setLegalMoveStyles({});
   }, [match.move_count]);
 
+  // Check achievements once when match finishes
+  useEffect(() => {
+    if (match.status !== "FINISHED" || !isPlayer || achievementCheckedRef.current) return;
+    achievementCheckedRef.current = true;
+    fetch("/api/achievements/check", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ matchId: match.id }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.newly_earned?.length > 0) {
+          setAchievements(data.newly_earned);
+        }
+      })
+      .catch(() => { /* ignore */ });
+  }, [match.status, match.id, isPlayer]);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/matches/${match.id}`);
     if (!res.ok) return;
     const data = await res.json();
+    const newMatch: MatchData = data.match;
+
     setMatch((prev) => {
-      if (data.match.move_count === prev.move_count && data.match.status === prev.status)
-        return prev;
-      return data.match;
+      if (newMatch.move_count === prev.move_count && newMatch.status === prev.status) return prev;
+      return newMatch;
     });
-  }, [match.id]);
+
+    // Execute pre-move if it's now my turn
+    if (
+      newMatch.status === "ACTIVE" &&
+      newMatch.turn === myColor &&
+      premoveRef.current &&
+      !busy
+    ) {
+      const pm = premoveRef.current;
+      premoveRef.current = null;
+      setPremoveStyles({});
+
+      const test = new Chess(newMatch.fen);
+      if (newMatch.pgn) { try { test.loadPgn(newMatch.pgn); } catch { /* ignore */ } }
+      try {
+        const valid = test.move({ from: pm.from, to: pm.to, promotion: "q" });
+        if (valid) {
+          setBusy(true);
+          fetch(`/api/matches/${newMatch.id}/move`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ from: pm.from, to: pm.to, promotion: "q" }),
+          })
+            .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+              setBusy(false);
+              if (!ok) setError(d.error ?? "Pré-lance inválido");
+              else setMatch(d.match);
+            })
+            .catch(() => setBusy(false));
+        }
+      } catch { /* premove became invalid */ }
+    }
+  }, [match.id, myColor, busy]);
 
   useEffect(() => {
     if (match.status === "FINISHED" || match.status === "CANCELLED") return;
@@ -113,6 +169,7 @@ export function MatchClient({
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [match.status, refresh]);
 
+  // Highlight: last move
   const lastMoveStyles = useMemo(() => {
     const moves = chess.history({ verbose: true });
     const last = moves[moves.length - 1];
@@ -123,6 +180,7 @@ export function MatchClient({
     };
   }, [chess]);
 
+  // Highlight: check
   const checkStyles = useMemo(() => {
     if (!chess.inCheck?.()) return {};
     const board = chess.board();
@@ -139,8 +197,8 @@ export function MatchClient({
   }, [chess]);
 
   const customSquareStyles = useMemo(
-    () => ({ ...lastMoveStyles, ...checkStyles, ...legalMoveStyles }),
-    [lastMoveStyles, checkStyles, legalMoveStyles]
+    () => ({ ...lastMoveStyles, ...checkStyles, ...premoveStyles, ...legalMoveStyles }),
+    [lastMoveStyles, checkStyles, premoveStyles, legalMoveStyles]
   );
 
   const { capturedByWhite, capturedByBlack, advantage } = useMemo(
@@ -149,11 +207,11 @@ export function MatchClient({
   );
 
   const isMyTurn = isPlayer && match.status === "ACTIVE" && match.turn === myColor;
-
   const isBotMatch =
     match.status !== "WAITING" &&
     (match.white_user === null || match.black_user === null);
 
+  // Select a piece and show legal moves
   function selectSquare(sq: string) {
     const piece = chess.get(sq as Parameters<typeof chess.get>[0]);
     if (!piece || piece.color !== myColor) return;
@@ -171,14 +229,50 @@ export function MatchClient({
     setLegalMoveStyles(styles);
   }
 
+  // Set a pre-move (opponent's turn)
+  function setPremove(from: string, to: string) {
+    premoveRef.current = { from, to };
+    setPremoveStyles({
+      [from]: { backgroundColor: "rgba(120,80,220,0.45)" },
+      [to]: { backgroundColor: "rgba(120,80,220,0.30)" },
+    });
+  }
+
+  function clearPremove() {
+    premoveRef.current = null;
+    setPremoveStyles({});
+  }
+
   function onSquareClick(sq: string) {
+    // Opponent's turn: handle pre-move
+    if (!isMyTurn && match.status === "ACTIVE" && isPlayer) {
+      if (premoveRef.current) {
+        // Second click: set destination if first click was on own piece
+        const piece = chess.get(sq as Parameters<typeof chess.get>[0]);
+        const from = premoveRef.current.from;
+        // If clicking from scratch (no from set yet), or re-clicking the same square
+        if (from && sq !== from) {
+          setPremove(from, sq);
+        } else {
+          clearPremove();
+        }
+        return;
+      }
+      // First click: select own piece for pre-move
+      const piece = chess.get(sq as Parameters<typeof chess.get>[0]);
+      if (piece && piece.color === myColor) {
+        premoveRef.current = { from: sq, to: sq }; // placeholder from
+        setPremoveStyles({ [sq]: { backgroundColor: "rgba(120,80,220,0.45)" } });
+      }
+      return;
+    }
+
     if (!isMyTurn) return;
 
     if (selectedSquare === null) {
       selectSquare(sq);
       return;
     }
-
     if (sq === selectedSquare) {
       setSelectedSquare(null);
       setLegalMoveStyles({});
@@ -206,6 +300,11 @@ export function MatchClient({
     }
   }
 
+  function onSquareRightClick() {
+    // Right-click cancels pre-move
+    clearPremove();
+  }
+
   function onDrop(source: string, target: string): boolean {
     setSelectedSquare(null);
     setLegalMoveStyles({});
@@ -215,11 +314,7 @@ export function MatchClient({
     const test = new Chess(match.fen);
     if (match.pgn) { try { test.loadPgn(match.pgn); } catch { /* ignore */ } }
     let local;
-    try {
-      local = test.move({ from: source, to: target, promotion: "q" });
-    } catch {
-      return false;
-    }
+    try { local = test.move({ from: source, to: target, promotion: "q" }); } catch { return false; }
     if (!local) return false;
 
     setBusy(true);
@@ -232,11 +327,7 @@ export function MatchClient({
       });
       const data = await res.json();
       setBusy(false);
-      if (!res.ok) {
-        setError(data.error ?? "Erro no lance");
-        await refresh();
-        return;
-      }
+      if (!res.ok) { setError(data.error ?? "Erro no lance"); await refresh(); return; }
       setMatch(data.match);
     })();
     return true;
@@ -278,7 +369,6 @@ export function MatchClient({
     } catch { /* ignore */ }
   }
 
-  // Layout-aware: top bar = color opposite to viewer's bottom
   const topColor: "w" | "b" = orientation === "white" ? "b" : "w";
   const bottomColor: "w" | "b" = orientation === "white" ? "w" : "b";
   const topUser = topColor === "w" ? match.white_user : match.black_user;
@@ -291,19 +381,49 @@ export function MatchClient({
   const bottomIsTurn = match.status === "ACTIVE" && match.turn === bottomColor;
   const topIsMe = myColor === topColor;
   const bottomIsMe = myColor === bottomColor;
+  const hasPremove = !!premoveRef.current && premoveRef.current.from !== premoveRef.current.to;
 
-  const topPlaceholder = topUser === null
-    ? match.status === "WAITING"
-      ? "Aguardando oponente…"
-      : isBotMatch
-        ? "🤖 Bot"
-        : "Sem oponente"
-    : "";
-
-  const bottomPlaceholder = bottomIsMe ? `@${bottomUser?.username ?? "Você"}` : "Espectador";
+  const topPlaceholder =
+    topUser === null
+      ? match.status === "WAITING"
+        ? "Aguardando oponente…"
+        : isBotMatch
+          ? "🤖 Bot"
+          : "Sem oponente"
+      : "";
+  const bottomPlaceholder = bottomIsMe
+    ? `@${bottomUser?.username ?? "Você"}`
+    : "Espectador";
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+      {/* Achievement toasts */}
+      {achievements.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 space-y-2">
+          {achievements.map((a) => (
+            <div
+              key={a.id}
+              className="flex items-center gap-3 rounded-xl border border-accent/40 bg-surface px-4 py-3 shadow-glow"
+            >
+              <span className="text-2xl">{a.icon}</span>
+              <div>
+                <div className="text-xs font-bold text-accent">Nova conquista!</div>
+                <div className="text-sm font-semibold">{a.name}</div>
+                {a.reward_coins > 0 && (
+                  <div className="text-xs text-success">+{a.reward_coins} coins</div>
+                )}
+              </div>
+              <button
+                onClick={() => setAchievements((prev) => prev.filter((x) => x.id !== a.id))}
+                className="ml-2 text-muted hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Board column */}
       <div className="space-y-2">
         <div className="flex items-center justify-between py-1">
@@ -336,7 +456,8 @@ export function MatchClient({
             boardOrientation={orientation}
             onPieceDrop={onDrop}
             onSquareClick={onSquareClick}
-            arePiecesDraggable={isMyTurn && !busy}
+            onSquareRightClick={onSquareRightClick}
+            arePiecesDraggable={(isMyTurn || (!isMyTurn && isPlayer && match.status === "ACTIVE")) && !busy}
             customSquareStyles={customSquareStyles}
             showBoardNotation={true}
             customBoardStyle={{
@@ -363,6 +484,16 @@ export function MatchClient({
           isMe={bottomIsMe}
         />
 
+        {/* Pre-move indicator */}
+        {hasPremove && (
+          <div className="flex items-center justify-between rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs">
+            <span className="text-purple-300">Pré-lance ativo</span>
+            <button onClick={clearPremove} className="text-muted hover:text-white">
+              Cancelar
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="rounded border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
             {error}
@@ -372,13 +503,11 @@ export function MatchClient({
 
       {/* Sidebar */}
       <aside className="space-y-3">
-        {/* Status + Actions */}
         <div className="card space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Status</h3>
             <StatusBadge status={match.status} result={match.result} />
           </div>
-
           <div className="text-sm">
             {match.status === "WAITING" && (
               <p className="text-muted">
@@ -410,11 +539,8 @@ export function MatchClient({
                 )}
               </div>
             )}
-            {match.status === "CANCELLED" && (
-              <p className="text-muted">Partida cancelada.</p>
-            )}
+            {match.status === "CANCELLED" && <p className="text-muted">Partida cancelada.</p>}
           </div>
-
           <div className="flex flex-col gap-2">
             {match.status === "WAITING" && !isPlayer && (
               <button onClick={joinMatch} disabled={busy} className="btn-primary">
@@ -422,24 +548,22 @@ export function MatchClient({
               </button>
             )}
             {match.status === "WAITING" && match.creator_id === viewerId && (
-              <button onClick={cancel} disabled={busy} className="btn-danger">
-                Cancelar partida
-              </button>
+              <button onClick={cancel} disabled={busy} className="btn-danger">Cancelar partida</button>
             )}
             {match.status === "ACTIVE" && isPlayer && (
-              <button onClick={resign} disabled={busy} className="btn-danger">
-                Desistir
-              </button>
+              <button onClick={resign} disabled={busy} className="btn-danger">Desistir</button>
             )}
             {match.status === "FINISHED" && (
-              <Link href="/lobby" className="btn-primary text-center">
-                Voltar ao lobby
-              </Link>
+              <>
+                <Link href="/lobby" className="btn-primary text-center">Voltar ao lobby</Link>
+                <Link href="/achievements" className="btn-secondary text-center text-xs">
+                  Ver conquistas
+                </Link>
+              </>
             )}
           </div>
         </div>
 
-        {/* Pot */}
         <div className="card">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted">Pote</span>
@@ -449,18 +573,15 @@ export function MatchClient({
             <span className="text-2xl font-bold text-accent">{formatCoins(match.pot)}</span>
             <span className="text-sm text-muted">coins</span>
           </div>
-          {match.wager > 0 && (
+          {match.wager > 0 ? (
             <div className="mt-1 text-xs text-muted">
-              Aposta por jogador:{" "}
-              <span className="text-white">{formatCoins(match.wager)}</span>
+              Aposta por jogador: <span className="text-white">{formatCoins(match.wager)}</span>
             </div>
-          )}
-          {match.wager === 0 && (
+          ) : (
             <div className="mt-1 text-xs text-muted">Amistoso sem aposta</div>
           )}
         </div>
 
-        {/* Move list */}
         <div className="card">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
@@ -469,14 +590,12 @@ export function MatchClient({
             <div className="flex gap-1">
               <button
                 onClick={() => copyText(match.fen, "fen")}
-                title="Copiar FEN"
                 className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:border-accent/50 hover:text-accent"
               >
                 {copied === "fen" ? "✓ FEN" : "FEN"}
               </button>
               <button
                 onClick={() => copyText(match.pgn || "", "pgn")}
-                title="Copiar PGN"
                 className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:border-accent/50 hover:text-accent"
               >
                 {copied === "pgn" ? "✓ PGN" : "PGN"}
@@ -493,13 +612,7 @@ export function MatchClient({
 }
 
 function PlayerBar({
-  user,
-  color,
-  isTurn,
-  placeholder,
-  captured,
-  advantage,
-  isMe,
+  user, color, isTurn, placeholder, captured, advantage, isMe,
 }: {
   user: { username: string; rating: number } | null;
   color: "w" | "b";
@@ -512,36 +625,22 @@ function PlayerBar({
   const sortedCaptures = [...captured].sort(
     (a, b) => PIECE_ORDER.indexOf(a) - PIECE_ORDER.indexOf(b)
   );
-
   return (
-    <div
-      className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-all duration-200 ${
-        isTurn
-          ? "border-accent/50 bg-accent/5 ring-1 ring-accent/20"
-          : "border-border bg-surfaceAlt"
-      }`}
-    >
-      <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-base select-none ${
-          color === "w"
-            ? "border-white/25 bg-white/10 text-white"
-            : "border-white/10 bg-black/25 text-white"
-        }`}
-      >
+    <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-all duration-200 ${
+      isTurn ? "border-accent/50 bg-accent/5 ring-1 ring-accent/20" : "border-border bg-surfaceAlt"
+    }`}>
+      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-base select-none ${
+        color === "w" ? "border-white/25 bg-white/10 text-white" : "border-white/10 bg-black/25 text-white"
+      }`}>
         {color === "w" ? "♔" : "♚"}
       </div>
-
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-1.5">
           {user ? (
             <>
-              <span className="truncate text-sm font-semibold">
-                {isMe ? "Você" : `@${user.username}`}
-              </span>
+              <span className="truncate text-sm font-semibold">{isMe ? "Você" : `@${user.username}`}</span>
               <span className="shrink-0 text-xs text-muted">({user.rating})</span>
-              {advantage > 0 && (
-                <span className="shrink-0 text-xs font-medium text-success">+{advantage}</span>
-              )}
+              {advantage > 0 && <span className="shrink-0 text-xs font-medium text-success">+{advantage}</span>}
             </>
           ) : (
             <span className="text-sm text-muted">{placeholder}</span>
@@ -549,13 +648,10 @@ function PlayerBar({
         </div>
         {sortedCaptures.length > 0 && (
           <div className="mt-0.5 flex flex-wrap gap-0 text-[11px] leading-none opacity-60 select-none">
-            {sortedCaptures.map((p, i) => (
-              <span key={i}>{CAPTURED_SYMBOLS[p]}</span>
-            ))}
+            {sortedCaptures.map((p, i) => <span key={i}>{CAPTURED_SYMBOLS[p]}</span>)}
           </div>
         )}
       </div>
-
       {isTurn && (
         <div className="flex shrink-0 items-center gap-1.5">
           <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
@@ -567,22 +663,18 @@ function PlayerBar({
 }
 
 function StatusBadge({ status, result }: { status: string; result: string | null }) {
-  if (status === "WAITING")
-    return <span className="badge text-[10px]">Aguardando</span>;
-  if (status === "ACTIVE")
-    return <span className="badge-accent text-[10px]">Em andamento</span>;
+  if (status === "WAITING") return <span className="badge text-[10px]">Aguardando</span>;
+  if (status === "ACTIVE") return <span className="badge-accent text-[10px]">Em andamento</span>;
   if (status === "FINISHED") {
-    if (result?.includes("DRAW"))
-      return <span className="badge text-[10px]">Empate</span>;
+    if (result?.includes("DRAW")) return <span className="badge text-[10px]">Empate</span>;
     return <span className="badge-success text-[10px]">Finalizada</span>;
   }
-  if (status === "CANCELLED")
-    return <span className="badge-danger text-[10px]">Cancelada</span>;
+  if (status === "CANCELLED") return <span className="badge-danger text-[10px]">Cancelada</span>;
   return null;
 }
 
 function PgnList({ pgn, moveCount }: { pgn: string; moveCount: number }) {
-  const pgnListRef = useRef<HTMLOListElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
 
   const pairs = useMemo(() => {
     if (!pgn) return [];
@@ -595,9 +687,8 @@ function PgnList({ pgn, moveCount }: { pgn: string; moveCount: number }) {
     const result: { num: number; w?: string; b?: string }[] = [];
     for (const t of tokens) {
       const m = t.match(/^(\d+)\.+$/);
-      if (m) {
-        result.push({ num: Number(m[1]) });
-      } else if (result.length) {
+      if (m) result.push({ num: Number(m[1]) });
+      else if (result.length) {
         const last = result[result.length - 1];
         if (!last.w) last.w = t;
         else if (!last.b) last.b = t;
@@ -607,40 +698,23 @@ function PgnList({ pgn, moveCount }: { pgn: string; moveCount: number }) {
   }, [pgn]);
 
   useEffect(() => {
-    if (pgnListRef.current) {
-      pgnListRef.current.scrollTop = pgnListRef.current.scrollHeight;
-    }
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [moveCount]);
 
   if (!pgn || pairs.length === 0)
     return <p className="text-xs text-muted">Sem lances ainda.</p>;
 
-  const lastPairIdx = pairs.length - 1;
+  const lastIdx = pairs.length - 1;
 
   return (
-    <ol ref={pgnListRef} className="space-y-0.5 font-mono text-xs">
+    <ol ref={listRef} className="space-y-0.5 font-mono text-xs">
       {pairs.map((p, i) => {
-        const isLast = i === lastPairIdx;
+        const isLast = i === lastIdx;
         return (
-          <li
-            key={p.num}
-            className={`flex gap-2 rounded px-1 py-0.5 ${isLast ? "bg-accent/10" : "hover:bg-surfaceAlt"}`}
-          >
+          <li key={p.num} className={`flex gap-2 rounded px-1 py-0.5 ${isLast ? "bg-accent/10" : "hover:bg-surfaceAlt"}`}>
             <span className="w-5 shrink-0 text-muted">{p.num}.</span>
-            <span
-              className={`w-14 shrink-0 ${
-                isLast && moveCount % 2 === 1 ? "font-bold text-accent" : ""
-              }`}
-            >
-              {p.w}
-            </span>
-            <span
-              className={`w-14 shrink-0 ${
-                isLast && moveCount % 2 === 0 && p.b ? "font-bold text-accent" : ""
-              }`}
-            >
-              {p.b}
-            </span>
+            <span className={`w-14 shrink-0 ${isLast && moveCount % 2 === 1 ? "font-bold text-accent" : ""}`}>{p.w}</span>
+            <span className={`w-14 shrink-0 ${isLast && moveCount % 2 === 0 && p.b ? "font-bold text-accent" : ""}`}>{p.b}</span>
           </li>
         );
       })}

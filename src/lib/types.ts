@@ -5,7 +5,26 @@ export type TransactionType =
   | "WAGER_REFUND"
   | "WAGER_WIN"
   | "WAGER_LOSS"
-  | "ADJUSTMENT";
+  | "ADJUSTMENT"
+  | "ACHIEVEMENT";
+
+export type AchievementCategory = "partidas" | "xadrez" | "bot" | "rating" | "apostas";
+
+export interface AchievementType {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: AchievementCategory;
+  reward_coins: number;
+  sort_order: number;
+}
+
+export interface UserAchievement {
+  achievement_id: string;
+  earned_at: string;
+  achievement: AchievementType;
+}
 
 export type MatchStatus = "WAITING" | "ACTIVE" | "FINISHED" | "CANCELLED";
 
@@ -54,6 +73,8 @@ export interface ChessTransaction {
 export interface ChessMatch {
   id: string;
   wager: number;
+  rating_min: number | null;
+  rating_max: number | null;
   status: MatchStatus;
   result: MatchResult | null;
   white_user_id: string | null;

@@ -9,18 +9,19 @@ type Match = {
   wager: number;
   status: string;
   createdAt: string;
+  rating_min: number | null;
+  rating_max: number | null;
   whiteUser: { id: string; username: string; rating: number } | null;
   blackUser: { id: string; username: string; rating: number } | null;
 };
 
-function Avatar({ username, size = "sm" }: { username: string; size?: "sm" | "md" }) {
+function Avatar({ username }: { username: string }) {
   const initials = username.slice(0, 2).toUpperCase();
   const hue = username.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
-  const dim = size === "sm" ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm";
   return (
     <div
-      className={`${dim} flex shrink-0 items-center justify-center rounded-full font-bold`}
-      style={{ background: `hsl(${hue},50%,25%)`, color: `hsl(${hue},80%,75%)` }}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+      style={{ background: `hsl(${hue},45%,22%)`, color: `hsl(${hue},75%,70%)` }}
     >
       {initials}
     </div>
@@ -34,12 +35,28 @@ function WagerBadge({ wager }: { wager: number }) {
   return <span className="badge text-[10px]">{formatCoins(wager)}</span>;
 }
 
-export function LobbyClient() {
+function RatingRangeBadge({ min, max }: { min: number | null; max: number | null }) {
+  if (min == null && max == null) return <span className="badge text-[10px]">Aberto</span>;
+  return (
+    <span className="badge text-[10px]">
+      {min ?? "?"}–{max ?? "?"}
+    </span>
+  );
+}
+
+const RANGE_OPTIONS = [
+  { value: "200", label: "±200", desc: "Competitivo" },
+  { value: "500", label: "±500", desc: "Relaxado" },
+  { value: "open", label: "Livre", desc: "Qualquer rating" },
+] as const;
+
+export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const router = useRouter();
   const [waiting, setWaiting] = useState<Match[]>([]);
   const [active, setActive] = useState<Match[]>([]);
   const [wager, setWager] = useState(50);
   const [color, setColor] = useState<"w" | "b" | "random">("random");
+  const [ratingRange, setRatingRange] = useState<"200" | "500" | "open">("200");
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +86,7 @@ export function LobbyClient() {
     const res = await fetch("/api/matches", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ wager, preferredColor: color }),
+      body: JSON.stringify({ wager, preferredColor: color, ratingRange }),
     });
     const data = await res.json();
     setCreating(false);
@@ -101,22 +118,25 @@ export function LobbyClient() {
     router.push(`/match/${id}`);
   }
 
+  function canJoin(m: Match) {
+    if (m.rating_min != null && viewerRating < m.rating_min) return false;
+    if (m.rating_max != null && viewerRating > m.rating_max) return false;
+    return true;
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      {/* Match lists */}
       <div className="space-y-6 lg:col-span-2">
-        {/* Waiting matches */}
+        {/* Waiting */}
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Partidas abertas</h2>
-            <span className="badge text-[10px]">
-              {waiting.length} {waiting.length === 1 ? "partida" : "partidas"}
-            </span>
+            <span className="badge text-[10px]">{waiting.length} aguardando</span>
           </div>
           {waiting.length === 0 ? (
             <div className="card flex flex-col items-center gap-2 py-8 text-center text-muted">
-              <span className="text-3xl opacity-40">♟</span>
-              <p className="text-sm">Nenhuma partida aberta agora.</p>
+              <span className="text-3xl opacity-30">♟</span>
+              <p className="text-sm">Nenhuma partida aberta.</p>
               <p className="text-xs">Crie a sua pelo painel ao lado!</p>
             </div>
           ) : (
@@ -124,41 +144,36 @@ export function LobbyClient() {
               {waiting.map((m) => {
                 const host = m.whiteUser ?? m.blackUser;
                 const hostColorLabel = m.whiteUser ? "Brancas" : "Pretas";
-                const pot = m.wager * 2;
+                const joinable = canJoin(m);
                 return (
-                  <li
-                    key={m.id}
-                    className="card flex flex-wrap items-center justify-between gap-3 py-3"
-                  >
+                  <li key={m.id} className="card flex flex-wrap items-center justify-between gap-3 py-3">
                     <div className="flex items-center gap-3">
                       {host && <Avatar username={host.username} />}
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">
-                            @{host?.username}
-                          </span>
-                          <span className="text-[10px] text-muted">
-                            {host?.rating} elo
-                          </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-semibold">@{host?.username}</span>
+                          <span className="text-[10px] text-muted">{host?.rating} elo</span>
                           <WagerBadge wager={m.wager} />
+                          <RatingRangeBadge min={m.rating_min} max={m.rating_max} />
                         </div>
                         <div className="mt-0.5 text-xs text-muted">
                           Joga de {hostColorLabel} • pot{" "}
-                          <span className="text-accent">{formatCoins(pot)}</span> •{" "}
+                          <span className="text-accent">{formatCoins(m.wager * 2)}</span> •{" "}
                           {formatDate(m.createdAt)}
                         </div>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Link href={`/match/${m.id}`} className="btn-secondary text-xs py-1.5">
+                      <Link href={`/match/${m.id}`} className="btn-secondary py-1.5 text-xs">
                         Ver
                       </Link>
                       <button
                         onClick={() => joinMatch(m.id)}
-                        disabled={joining === m.id}
-                        className="btn-primary text-xs py-1.5"
+                        disabled={joining === m.id || !joinable}
+                        title={!joinable ? `Fora da faixa de rating (${m.rating_min}–${m.rating_max})` : undefined}
+                        className={`py-1.5 text-xs ${joinable ? "btn-primary" : "btn-secondary opacity-40 cursor-not-allowed"}`}
                       >
-                        {joining === m.id ? "Entrando…" : "Entrar"}
+                        {joining === m.id ? "Entrando…" : joinable ? "Entrar" : "Fora do range"}
                       </button>
                     </div>
                   </li>
@@ -168,13 +183,11 @@ export function LobbyClient() {
           )}
         </section>
 
-        {/* Active matches */}
+        {/* Active */}
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Em andamento</h2>
-            <span className="badge-accent text-[10px]">
-              {active.length} {active.length === 1 ? "ativa" : "ativas"}
-            </span>
+            <span className="badge-accent text-[10px]">{active.length} ativas</span>
           </div>
           {active.length === 0 ? (
             <div className="card py-6 text-center text-sm text-muted">
@@ -183,10 +196,7 @@ export function LobbyClient() {
           ) : (
             <ul className="space-y-2">
               {active.map((m) => (
-                <li
-                  key={m.id}
-                  className="card flex items-center justify-between py-3"
-                >
+                <li key={m.id} className="card flex items-center justify-between py-3">
                   <div className="flex items-center gap-3">
                     <div className="flex -space-x-2">
                       {m.whiteUser && <Avatar username={m.whiteUser.username} />}
@@ -194,21 +204,16 @@ export function LobbyClient() {
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 text-sm">
-                        <span className="font-semibold">
-                          @{m.whiteUser?.username ?? "—"}
-                        </span>
+                        <span className="font-semibold">@{m.whiteUser?.username ?? "—"}</span>
                         <span className="text-muted">vs</span>
-                        <span className="font-semibold">
-                          @{m.blackUser?.username ?? "Bot"}
-                        </span>
+                        <span className="font-semibold">@{m.blackUser?.username ?? "Bot"}</span>
                       </div>
                       <div className="text-xs text-muted">
-                        pot{" "}
-                        <span className="text-accent">{formatCoins(m.wager * 2)}</span> coins
+                        pot <span className="text-accent">{formatCoins(m.wager * 2)}</span>
                       </div>
                     </div>
                   </div>
-                  <Link href={`/match/${m.id}`} className="btn-secondary text-xs py-1.5">
+                  <Link href={`/match/${m.id}`} className="btn-secondary py-1.5 text-xs">
                     Assistir
                   </Link>
                 </li>
@@ -224,7 +229,7 @@ export function LobbyClient() {
         <div className="card">
           <h3 className="text-base font-semibold">Criar partida</h3>
           <p className="mt-1 text-xs text-muted">
-            O valor sai do seu saldo e vai pra escrow. Vencedor leva o pote.
+            Aposta vai pra escrow. Vencedor leva o pote com 5% de rake.
           </p>
           <form onSubmit={createMatch} className="mt-4 space-y-4">
             <div>
@@ -254,6 +259,33 @@ export function LobbyClient() {
                 ))}
               </div>
             </div>
+
+            <div>
+              <label className="label">Faixa de rating</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {RANGE_OPTIONS.map((opt) => (
+                  <button
+                    type="button"
+                    key={opt.value}
+                    onClick={() => setRatingRange(opt.value)}
+                    className={`rounded-lg border py-2 text-xs transition-colors ${
+                      ratingRange === opt.value
+                        ? "border-accent bg-accent text-black font-medium"
+                        : "border-border text-muted hover:border-accent/40 hover:text-white"
+                    }`}
+                  >
+                    <div className="font-semibold">{opt.label}</div>
+                    <div className="text-[10px] opacity-70">{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+              {ratingRange !== "open" && (
+                <p className="mt-1.5 text-[11px] text-muted">
+                  Seu rating ({viewerRating}) → aceitará {viewerRating - Number(ratingRange)}–{viewerRating + Number(ratingRange)}
+                </p>
+              )}
+            </div>
+
             <div>
               <label className="label">Sua cor</label>
               <div className="grid grid-cols-3 gap-1.5">
@@ -273,25 +305,24 @@ export function LobbyClient() {
                 ))}
               </div>
             </div>
-            {error && <p className="text-sm text-danger">{error}</p>}
+
+            {error && (
+              <p className="text-sm text-danger">{error}</p>
+            )}
             <button type="submit" disabled={creating} className="btn-primary w-full">
-              {creating
-                ? "Criando…"
-                : wager > 0
-                  ? `Criar • ${formatCoins(wager)} coins`
-                  : "Criar amistoso"}
+              {creating ? "Criando…" : wager > 0 ? `Criar • ${formatCoins(wager)} coins` : "Criar amistoso"}
             </button>
           </form>
         </div>
 
-        {/* Bot match */}
+        {/* Bot */}
         <div className="card border-accent/25 ring-1 ring-accent/15">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold">🤖 Jogar vs Bot</h3>
             <span className="badge-accent text-[10px]">treino</span>
           </div>
           <p className="mt-1 text-xs text-muted">
-            Sem aposta, sem rating. Pratique antes de apostar de verdade.
+            Sem aposta, sem rating. Conquistas de bot contam!
           </p>
           <form onSubmit={createBotMatch} className="mt-4 space-y-3">
             <div>
@@ -342,26 +373,17 @@ export function LobbyClient() {
         <div className="card">
           <h3 className="text-sm font-semibold">Como funciona</h3>
           <ul className="mt-3 space-y-2 text-xs text-muted">
-            <li className="flex gap-2">
-              <span className="shrink-0 text-accent">1.</span>
-              Crie ou entre em uma partida (ou treine vs bot).
-            </li>
-            <li className="flex gap-2">
-              <span className="shrink-0 text-accent">2.</span>
-              O valor vai pro escrow assim que ambos confirmam.
-            </li>
-            <li className="flex gap-2">
-              <span className="shrink-0 text-accent">3.</span>
-              O vencedor leva o pote (com 5% de taxa da casa).
-            </li>
-            <li className="flex gap-2">
-              <span className="shrink-0 text-accent">4.</span>
-              Saque coins via{" "}
-              <a href="/wallet" className="text-accent hover:underline">
-                Carteira
-              </a>
-              .
-            </li>
+            {[
+              "Crie ou entre em uma partida (ou treine vs bot).",
+              "O valor vai pro escrow assim que ambos confirmam.",
+              "O vencedor leva o pote (com 5% de taxa da casa).",
+              <>Saque coins via <a href="/wallet" className="text-accent hover:underline">Carteira</a>. Ganhe <a href="/achievements" className="text-accent hover:underline">Conquistas</a>!</>,
+            ].map((t, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="shrink-0 text-accent">{i + 1}.</span>
+                <span>{t}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </aside>

@@ -6,6 +6,7 @@ const NAV = [
   { href: "/lobby", label: "Lobby" },
   { href: "/history", label: "Histórico" },
   { href: "/leaderboard", label: "Ranking" },
+  { href: "/achievements", label: "Conquistas" },
   { href: "/wallet", label: "Carteira" },
 ];
 

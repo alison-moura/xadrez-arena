@@ -6,9 +6,14 @@ import type { MatchStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+// Stake limit: novatos (< 5 partidas finalizadas) limitados a 100 coins por aposta
+const NOVICE_MATCH_THRESHOLD = 5;
+const NOVICE_MAX_WAGER = 100;
+
 const createSchema = z.object({
   wager: z.number().int().min(0).max(1_000_000),
   preferredColor: z.enum(["w", "b", "random"]).default("random"),
+  ratingRange: z.enum(["100", "200", "500", "open"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -22,7 +27,7 @@ export async function GET(req: Request) {
   const { data, error } = await supabase
     .from("chess_matches")
     .select(
-      `id, wager, status, created_at, white_user_id, black_user_id,
+      `id, wager, status, created_at, white_user_id, black_user_id, rating_min, rating_max,
        white_user:white_user_id(id, username, rating),
        black_user:black_user_id(id, username, rating)`
     )
@@ -30,6 +35,7 @@ export async function GET(req: Request) {
     .is("bot_difficulty", null)
     .order("created_at", { ascending: false })
     .limit(50);
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -41,16 +47,61 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
+
   const body = await req.json().catch(() => ({}));
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
+
+  const { wager, preferredColor, ratingRange } = parsed.data;
+
+  // Stake limit: check how many finished matches the user has
+  if (wager > NOVICE_MAX_WAGER) {
+    const { count } = await supabase
+      .from("chess_matches")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "FINISHED")
+      .is("bot_difficulty", null)
+      .or(`white_user_id.eq.${session.user.id},black_user_id.eq.${session.user.id}`);
+
+    if ((count ?? 0) < NOVICE_MATCH_THRESHOLD) {
+      return NextResponse.json(
+        {
+          error: `Novos jogadores só podem apostar até ${NOVICE_MAX_WAGER} coins nas primeiras ${NOVICE_MATCH_THRESHOLD} partidas.`,
+          novice_limit: true,
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Compute rating range bounds
+  let ratingMin: number | null = null;
+  let ratingMax: number | null = null;
+
+  if (ratingRange && ratingRange !== "open") {
+    const { data: userRow } = await supabase
+      .from("chess_users")
+      .select("rating")
+      .eq("id", session.user.id)
+      .single();
+
+    if (userRow) {
+      const spread = Number(ratingRange);
+      ratingMin = userRow.rating - spread;
+      ratingMax = userRow.rating + spread;
+    }
+  }
+
   const { data, error } = await supabase.rpc("chess_create_match", {
     p_user_id: session.user.id,
-    p_wager: parsed.data.wager,
-    p_color: parsed.data.preferredColor,
+    p_wager: wager,
+    p_color: preferredColor,
+    p_rating_min: ratingMin,
+    p_rating_max: ratingMax,
   });
+
   if (error) {
     return NextResponse.json({ error: rpcError(error) }, { status: 400 });
   }
