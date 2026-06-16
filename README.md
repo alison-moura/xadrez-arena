@@ -7,17 +7,42 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 
 ## Recursos
 
+### Tabuleiro
+- Tabuleiro interativo com **arrastar e clicar** (click-to-move com highlight de lances legais)
+- **Highlight do último lance** (tint dourado nas casas from/to)
+- **Highlight de xeque** (overlay vermelho no rei)
+- **Highlight de lances legais** — dots para casas vazias, overlay para capturas
+- **Coordenadas visíveis** (a-h, 1-8)
+- **Peças capturadas** exibidas por jogador com ícones unicode
+- **Vantagem material** (+N) ao lado do nome do jogador
+- Orientação automática conforme a cor do jogador
+- Spin overlay durante envio do lance
+- Botões **copiar FEN** e **copiar PGN**
+- Lista de lances com scroll automático e destaque do lance atual
+
+### Plataforma
 - Cadastro e login (NextAuth + credenciais)
 - Bônus de boas-vindas de **1000 coins**
 - Lobby de partidas abertas com aposta configurável (incluindo amistosos sem aposta)
 - Partidas multiplayer em tempo real (polling de 1.5s) com validação de lances server-side via chess.js
 - Sistema de **carteira/escrow** atômico (PL/pgSQL): o valor da aposta é trancado no `chess_wallets.locked` quando cada jogador entra; vencedor recebe o pote menos rake de 5%
-- Tabuleiro interativo (`react-chessboard`) com orientação automática conforme a cor do jogador
 - Detecção automática de xeque-mate, empate, e fim de jogo; suporte a desistência
 - Depósitos simulados (sandbox)
 - Pedidos de saque via PIX/USDT/BTC/transferência (registrados como `PENDING` para liquidação manual)
 - Histórico de partidas, transações e saques
 - Ranking de jogadores por rating (atualizado a cada partida finalizada)
+
+### Bot de xadrez
+- 3 dificuldades: Fácil, Médio, Difícil
+- Algoritmo **minimax + alpha-beta pruning** com tabelas PST
+- Modo treino: sem aposta, sem rating
+
+### UI/UX
+- Dark theme com accent dourado (#f5b301)
+- Nav com **link ativo** destacado
+- Avatares gerados por iniciais com cor baseada no username
+- Cards de partida com rating ELO e wager colorido por valor
+- Landing page com seção de features e CTA
 
 ## Setup
 
@@ -86,11 +111,16 @@ src/
 │   ├── supabase.ts     # cliente singleton com service_role
 │   ├── auth.ts         # NextAuth config (JWT, credenciais)
 │   ├── chess-engine.ts # wrapper chess.js para validar lances
+│   ├── chess-bot.ts    # bot AI (minimax + alpha-beta + PST)
+│   ├── bot-runner.ts   # executa lance do bot após cada move humano
 │   ├── types.ts        # tipos TypeScript das tabelas
 │   └── utils.ts
 └── components/
+    ├── LogoutButton.tsx
+    └── NavLinks.tsx    # nav links com active state (usePathname)
 
 supabase/migrations/0001_chess_arena_init.sql  # schema + RPCs
+CLAUDE.md  # guia completo para desenvolvimento com agente Claude
 ```
 
 ### Fluxo de uma partida
@@ -108,18 +138,18 @@ Empate (`chess_record_move` com `p_is_draw=true`) devolve a aposta original a am
 Desistência (`chess_resign_match`) trata o oponente como vencedor.
 Cancelamento (`chess_cancel_match`) só é permitido em `WAITING` pelo criador, reembolsa.
 
-## Considerações de produção (5% restantes)
-
-Para virar 100% production-grade você ainda vai querer:
+## Considerações de produção (TODOs)
 
 - Relógio de xadrez (timer por jogador) — adicionar colunas `chess_matches.white_time_ms` / `black_time_ms`
 - WebSocket real (Supabase Realtime) — substitui o polling de 1.5s; basta `supabase.channel(...).on('postgres_changes', ...)`
+- Diálogo de promoção de peão (atualmente auto-promove para rainha)
 - Painel admin para aprovar saques (`chess_withdrawal_requests.status`)
 - Integração real com gateway de pagamento (Stripe Connect, PIX via Mercado Pago, etc)
 - KYC/AML conforme legislação do seu país para apostas com dinheiro real
 - Rate limiting nas APIs (ex: Upstash Ratelimit)
 - Detecção de cheating (lances do Stockfish)
 - Sistema de chat na partida (Supabase Realtime + tabela `chess_messages`)
+- Navegação por lances no PGN (ver posições passadas em modo read-only)
 
 ## Licença
 

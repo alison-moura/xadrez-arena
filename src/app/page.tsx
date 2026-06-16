@@ -8,72 +8,114 @@ export default async function LandingPage() {
 
   return (
     <main className="min-h-screen">
-      <header className="border-b border-border">
+      {/* Header */}
+      <header className="border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2">
-            <span className="text-2xl">♞</span>
+            <span className="text-2xl text-accent">♞</span>
             <span className="text-lg font-bold">Xadrez Arena</span>
           </div>
           <nav className="flex items-center gap-3">
-            <Link href="/login" className="btn-secondary">
+            <Link href="/login" className="btn-secondary py-1.5 text-sm">
               Entrar
             </Link>
-            <Link href="/register" className="btn-primary">
+            <Link href="/register" className="btn-primary py-1.5 text-sm">
               Criar conta grátis
             </Link>
           </nav>
         </div>
       </header>
 
-      <section className="mx-auto max-w-6xl px-6 py-20 text-center">
-        <span className="badge-accent mb-6 inline-block">+1000 coins de bônus ao se cadastrar</span>
-        <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight md:text-6xl">
-          Jogue xadrez. <span className="text-accent">Aposte.</span> Leve o pote.
+      {/* Hero */}
+      <section className="mx-auto max-w-6xl px-6 py-24 text-center">
+        <span className="badge-accent mb-6 inline-flex items-center gap-1.5 px-3 py-1 text-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          +1 000 coins de bônus ao se cadastrar
+        </span>
+        <h1 className="mx-auto max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-6xl">
+          Jogue xadrez.{" "}
+          <span className="text-accent">Aposte.</span>
+          <br />
+          Leve o pote.
         </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-muted">
-          Crie partidas com a aposta que quiser, desafie outros jogadores em tempo real
-          e ganhe coins a cada vitória. Saque quando quiser.
+        <p className="mx-auto mt-6 max-w-xl text-base text-muted md:text-lg">
+          Plataforma de xadrez multiplayer com sistema de apostas em coins.
+          Crie partidas, desafie outros jogadores e ganhe a cada vitória.
         </p>
         <div className="mt-10 flex flex-col items-center justify-center gap-3 md:flex-row">
-          <Link href="/register" className="btn-primary px-6 py-3 text-base">
-            Começar agora
+          <Link href="/register" className="btn-primary px-8 py-3 text-base">
+            Começar agora — é grátis
           </Link>
-          <Link href="/login" className="btn-secondary px-6 py-3 text-base">
+          <Link href="/login" className="btn-secondary px-8 py-3 text-base">
             Já tenho conta
           </Link>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 pb-20">
-        <div className="grid gap-6 md:grid-cols-3">
+      {/* Features */}
+      <section className="mx-auto max-w-6xl px-6 pb-16">
+        <div className="grid gap-4 md:grid-cols-3">
           {[
             {
               icon: "♟",
-              title: "Multiplayer real",
-              text: "Partidas em tempo real com validação server-side em cada lance. Justo para todo mundo.",
+              title: "Multiplayer em tempo real",
+              text: "Lance validado server-side com chess.js. Polling de 1.5s garante sincronização sem WebSocket.",
             },
             {
               icon: "💰",
-              title: "Aposte coins",
-              text: "Defina o valor da aposta na criação. O pote vai pra escrow e é pago ao vencedor automaticamente.",
+              title: "Escrow automático",
+              text: "Aposta trancada no momento que ambos confirmam. Vencedor recebe o pote automaticamente, com 5% de rake.",
+            },
+            {
+              icon: "🤖",
+              title: "Treine contra o Bot",
+              text: "Bot com 3 dificuldades (minimax + alpha-beta). Sem aposta, sem rating. Pratique antes de apostar.",
             },
             {
               icon: "🏆",
-              title: "Leaderboard + saque",
-              text: "Suba no ranking e saque seus coins via PIX, USDT ou outros métodos quando quiser.",
+              title: "Ranking e histórico",
+              text: "Rating ELO atualizado a cada partida. Leaderboard público com top 20 jogadores.",
+            },
+            {
+              icon: "💳",
+              title: "Carteira integrada",
+              text: "Depósitos sandbox e saques via PIX, USDT, BTC ou transferência bancária.",
+            },
+            {
+              icon: "🔒",
+              title: "Seguro e justo",
+              text: "Operações atômicas em PL/pgSQL. Sem double-spend, sem cheating server-side.",
             },
           ].map((c) => (
-            <div key={c.title} className="card">
-              <div className="text-3xl">{c.icon}</div>
-              <h3 className="mt-3 text-lg font-semibold">{c.title}</h3>
-              <p className="mt-2 text-sm text-muted">{c.text}</p>
+            <div
+              key={c.title}
+              className="card transition-colors hover:border-accent/30"
+            >
+              <div className="text-2xl">{c.icon}</div>
+              <h3 className="mt-3 text-sm font-semibold">{c.title}</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">{c.text}</p>
             </div>
           ))}
         </div>
       </section>
 
+      {/* CTA bottom */}
+      <section className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-6 py-16 text-center">
+          <h2 className="text-2xl font-bold md:text-3xl">
+            Pronto para sua primeira partida?
+          </h2>
+          <p className="mt-3 text-muted">
+            Cadastre-se grátis, ganhe 1000 coins de bônus e comece a jogar agora.
+          </p>
+          <Link href="/register" className="btn-primary mt-6 inline-flex px-8 py-3 text-base">
+            Criar conta grátis
+          </Link>
+        </div>
+      </section>
+
       <footer className="border-t border-border py-6 text-center text-xs text-muted">
-        © {new Date().getFullYear()} Xadrez Arena. Jogue com responsabilidade.
+        © {new Date().getFullYear()} Xadrez Arena — Jogue com responsabilidade.
       </footer>
     </main>
   );
