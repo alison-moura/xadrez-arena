@@ -15,13 +15,15 @@ export async function GET() {
     const sb = createClient(url, key, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const r = await sb.from("chess_users").select("id, username, rating").limit(5);
+    const r1 = await sb.from("chess_users").select("id, username, rating").limit(5);
+    const r2 = await sb.from("chess_users").select("id, username, rating").order("rating", { ascending: false }).limit(20);
+    // import singleton to test
+    const { supabase: singleton } = await import("@/lib/supabase");
+    const r3 = await singleton.from("chess_users").select("id, username, rating").order("rating", { ascending: false }).limit(20);
     return NextResponse.json({
-      url: url.slice(0, 50),
-      keyPrefix: key.slice(0, 30),
-      keyLen: key.length,
-      data: r.data,
-      error: r.error,
+      fresh_no_order: r1,
+      fresh_with_order: r2,
+      singleton_query: r3,
     });
   } catch (e) {
     return NextResponse.json({
