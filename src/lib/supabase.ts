@@ -12,6 +12,11 @@ export const supabase: SupabaseClient =
   globalForSupabase.__sb ??
   createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: {
+      // garante que cada request escape do fetch cache do Next.js
+      fetch: (input, init) =>
+        fetch(input, { ...(init as RequestInit), cache: "no-store" }),
+    },
   });
 
 if (process.env.NODE_ENV !== "production") globalForSupabase.__sb = supabase;
