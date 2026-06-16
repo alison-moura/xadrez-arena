@@ -8,6 +8,9 @@ const NAV = [
   { href: "/leaderboard", label: "Ranking" },
   { href: "/achievements", label: "Conquistas" },
   { href: "/overwatch", label: "Overwatch" },
+  { href: "/shop", label: "Loja" },
+  { href: "/inventory", label: "Inventário" },
+  { href: "/market", label: "Mercado" },
   { href: "/wallet", label: "Carteira" },
 ];
 

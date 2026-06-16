@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { Chess } from "chess.js";
 import Link from "next/link";
 import { formatCoins } from "@/lib/utils";
+import { SKIN_DEFS, RARITY_COLORS, RARITY_LABELS, type SkinRarity } from "@/lib/skins";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -30,6 +31,7 @@ type MatchData = {
 };
 
 type EarnedAchievement = { id: string; name: string; icon: string; reward_coins: number };
+type SkinDrop = { skin_id: string; skin_name: string; rarity: SkinRarity };
 
 const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
 const PIECE_ORDER = ["q", "r", "b", "n", "p"];
@@ -67,12 +69,18 @@ export function MatchClient({
 }) {
   const [match, setMatch] = useState<MatchData>(initialMatch);
   const [error, setError] = useState<string | null>(null);
+  // `busy` blocks interaction (piece dragging) for the whole round trip, including
+  // bot thinking time. `sendingMove` only covers our own request and drives the
+  // spinner overlay — we don't want a loading screen while the bot "thinks".
   const [busy, setBusy] = useState(false);
+  const [sendingMove, setSendingMove] = useState(false);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalMoveStyles, setLegalMoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [premoveStyles, setPremoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [copied, setCopied] = useState<"fen" | "pgn" | null>(null);
   const [achievements, setAchievements] = useState<EarnedAchievement[]>([]);
+  const [skinDrop, setSkinDrop] = useState<SkinDrop | null>(null);
+  const [equippedSkinId, setEquippedSkinId] = useState("classic");
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState<string>("cheating");
   const [reportDetails, setReportDetails] = useState("");
@@ -81,12 +89,28 @@ export function MatchClient({
 
   const premoveRef = useRef<{ from: string; to: string } | null>(null);
   const achievementCheckedRef = useRef(false);
+  const dropCheckedRef = useRef(false);
+  const busyRef = useRef(busy);
+  useEffect(() => { busyRef.current = busy; }, [busy]);
+
+  // Load equipped skin once
+  useEffect(() => {
+    fetch("/api/skins")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.equippedSkinId) setEquippedSkinId(d.equippedSkinId); })
+      .catch(() => { /* ignore */ });
+  }, []);
+
+  const skin = SKIN_DEFS[equippedSkinId] ?? SKIN_DEFS.classic;
 
   const isViewerWhite = match.white_user_id === viewerId;
   const isViewerBlack = match.black_user_id === viewerId;
   const isPlayer = isViewerWhite || isViewerBlack;
   const myColor: "w" | "b" | null = isViewerWhite ? "w" : isViewerBlack ? "b" : null;
   const orientation: "white" | "black" = isViewerBlack ? "black" : "white";
+  const isBotMatch =
+    match.status !== "WAITING" &&
+    (match.white_user === null || match.black_user === null);
 
   const chess = useMemo(() => {
     const c = new Chess();
@@ -121,8 +145,30 @@ export function MatchClient({
       .catch(() => { /* ignore */ });
   }, [match.status, match.id, isPlayer]);
 
+  // Roll for a skin drop once when match finishes (human matches only)
+  useEffect(() => {
+    if (match.status !== "FINISHED" || !isPlayer || isBotMatch || dropCheckedRef.current) return;
+    dropCheckedRef.current = true;
+    fetch("/api/skins/drop", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ matchId: match.id }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.dropped) {
+          setSkinDrop({ skin_id: data.skin_id, skin_name: data.skin_name, rarity: data.rarity });
+        }
+      })
+      .catch(() => { /* ignore */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.status, match.id, isPlayer]);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // `refresh` intentionally has a stable identity (no `busy` dependency) so the
+  // polling interval below never has to be torn down and recreated mid-game —
+  // that churn was a source of board jank. Live values are read via busyRef.
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/matches/${match.id}`);
     if (!res.ok) return;
@@ -139,7 +185,7 @@ export function MatchClient({
       newMatch.status === "ACTIVE" &&
       newMatch.turn === myColor &&
       premoveRef.current &&
-      !busy
+      !busyRef.current
     ) {
       const pm = premoveRef.current;
       premoveRef.current = null;
@@ -151,6 +197,7 @@ export function MatchClient({
         const valid = test.move({ from: pm.from, to: pm.to, promotion: "q" });
         if (valid) {
           setBusy(true);
+          setSendingMove(true);
           fetch(`/api/matches/${newMatch.id}/move`, {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -159,14 +206,15 @@ export function MatchClient({
             .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
             .then(({ ok, d }) => {
               setBusy(false);
+              setSendingMove(false);
               if (!ok) setError(d.error ?? "Pré-lance inválido");
               else setMatch(d.match);
             })
-            .catch(() => setBusy(false));
+            .catch(() => { setBusy(false); setSendingMove(false); });
         }
       } catch { /* premove became invalid */ }
     }
-  }, [match.id, myColor, busy]);
+  }, [match.id, myColor]);
 
   useEffect(() => {
     if (match.status === "FINISHED" || match.status === "CANCELLED") return;
@@ -212,9 +260,6 @@ export function MatchClient({
   );
 
   const isMyTurn = isPlayer && match.status === "ACTIVE" && match.turn === myColor;
-  const isBotMatch =
-    match.status !== "WAITING" &&
-    (match.white_user === null || match.black_user === null);
 
   // Select a piece and show legal moves
   function selectSquare(sq: string) {
@@ -323,6 +368,7 @@ export function MatchClient({
     if (!local) return false;
 
     setBusy(true);
+    setSendingMove(true);
     setError(null);
     void (async () => {
       const res = await fetch(`/api/matches/${match.id}/move`, {
@@ -332,6 +378,7 @@ export function MatchClient({
       });
       const data = await res.json();
       setBusy(false);
+      setSendingMove(false);
       if (!res.ok) { setError(data.error ?? "Erro no lance"); await refresh(); return; }
       setMatch(data.match);
     })();
@@ -482,6 +529,30 @@ export function MatchClient({
         </div>
       )}
 
+      {/* Skin drop toast */}
+      {skinDrop && (
+        <div className="fixed bottom-4 left-4 z-50">
+          <div
+            className="flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 shadow-glow"
+            style={{ borderColor: RARITY_COLORS[skinDrop.rarity] + "66" }}
+          >
+            <span className="text-2xl">🎁</span>
+            <div>
+              <div className="text-xs font-bold" style={{ color: RARITY_COLORS[skinDrop.rarity] }}>
+                Drop de skin! ({RARITY_LABELS[skinDrop.rarity]})
+              </div>
+              <div className="text-sm font-semibold">{skinDrop.skin_name}</div>
+              <Link href="/inventory" className="text-xs text-accent hover:underline">
+                Ver inventário
+              </Link>
+            </div>
+            <button onClick={() => setSkinDrop(null)} className="ml-2 text-muted hover:text-white">
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Board column */}
       <div className="space-y-2">
         <div className="flex items-center justify-between py-1">
@@ -522,15 +593,24 @@ export function MatchClient({
               borderRadius: "8px",
               boxShadow: "0 16px 48px rgba(0,0,0,0.65)",
             }}
-            customDarkSquareStyle={{ backgroundColor: "#3a3a55" }}
-            customLightSquareStyle={{ backgroundColor: "#d8d8e5" }}
+            customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
+            customLightSquareStyle={{ backgroundColor: skin.boardLight }}
           />
-          {busy && (
+          {/* Only show the overlay spinner while sending our own move — never
+              while merely waiting on the bot, which felt bad in testing. */}
+          {sendingMove && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/20">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
           )}
         </div>
+
+        {isBotMatch && busy && !sendingMove && (
+          <div className="flex items-center gap-2 px-1 text-xs text-muted">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+            Bot está pensando…
+          </div>
+        )}
 
         <PlayerBar
           user={bottomUser}

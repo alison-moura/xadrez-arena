@@ -53,6 +53,7 @@ export interface ChessUser {
   banned_at: string | null;
   ban_reason: string | null;
   is_bot: boolean;
+  equipped_skin_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -140,6 +141,40 @@ export interface ChessMatchWithPlayers extends ChessMatch {
   white_user: { id: string; username: string; rating: number; games_played?: number } | null;
   black_user: { id: string; username: string; rating: number; games_played?: number } | null;
   winner: { id: string; username: string } | null;
+}
+
+export type SkinSource = "purchased" | "dropped" | "traded";
+
+export interface SkinPack {
+  id: string;
+  name: string;
+  description: string;
+  rarity: "common" | "rare" | "epic" | "legendary";
+  price_coins: number;
+  drop_weight: number;
+  sort_order: number;
+}
+
+export interface UserSkin {
+  id: string;
+  user_id: string;
+  skin_pack_id: string;
+  acquired_at: string;
+  source: SkinSource;
+  is_listed: boolean;
+  skin_pack?: SkinPack;
+}
+
+export interface SkinListing {
+  id: string;
+  user_skin_id: string;
+  seller_id: string;
+  skin_pack_id: string;
+  price_coins: number;
+  listed_at: string;
+  status: "active" | "sold" | "cancelled";
+  seller?: { id: string; username: string };
+  skin_pack?: SkinPack;
 }
 
 export interface ChessWithdrawalRequest {
