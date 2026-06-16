@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabase, rpcError } from "@/lib/supabase";
 import { applyMove } from "@/lib/chess-engine";
+import { playBotMove } from "@/lib/bot-runner";
 import type { ChessMatch } from "@/lib/types";
 
 const schema = z.object({
@@ -27,9 +28,9 @@ export async function POST(
 
   const { data: match, error: matchErr } = await supabase
     .from("chess_matches")
-    .select("id, status, white_user_id, black_user_id, turn, fen, pgn, move_count")
+    .select("id, status, white_user_id, black_user_id, turn, fen, pgn, move_count, bot_difficulty")
     .eq("id", params.id)
-    .maybeSingle<Pick<ChessMatch, "id" | "status" | "white_user_id" | "black_user_id" | "turn" | "fen" | "pgn" | "move_count">>();
+    .maybeSingle<Pick<ChessMatch, "id" | "status" | "white_user_id" | "black_user_id" | "turn" | "fen" | "pgn" | "move_count"> & { bot_difficulty: string | null }>();
 
   if (matchErr || !match) {
     return NextResponse.json({ error: "Partida não encontrada" }, { status: 404 });
@@ -66,6 +67,11 @@ export async function POST(
   });
   if (rpcErr) {
     return NextResponse.json({ error: rpcError(rpcErr) }, { status: 400 });
+  }
+
+  // se for partida vs bot e o jogo continua, deixa o bot jogar antes de devolver
+  if (match.bot_difficulty && !moveRes.isGameOver) {
+    await playBotMove(params.id);
   }
 
   // retorna estado atualizado

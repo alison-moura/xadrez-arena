@@ -27,6 +27,7 @@ export async function GET(req: Request) {
        black_user:black_user_id(id, username, rating)`
     )
     .eq("status", status)
+    .is("bot_difficulty", null)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) {

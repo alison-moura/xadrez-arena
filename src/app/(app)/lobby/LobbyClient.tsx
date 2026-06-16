@@ -21,6 +21,9 @@ export function LobbyClient() {
   const [color, setColor] = useState<"w" | "b" | "random">("random");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [botDifficulty, setBotDifficulty] = useState<"easy" | "medium" | "hard">("medium");
+  const [botColor, setBotColor] = useState<"w" | "b" | "random">("w");
+  const [creatingBot, setCreatingBot] = useState(false);
 
   async function load() {
     const [w, a] = await Promise.all([
@@ -50,6 +53,24 @@ export function LobbyClient() {
     setCreating(false);
     if (!res.ok) {
       setError(data.error ?? "Erro ao criar");
+      return;
+    }
+    router.push(`/match/${data.matchId}`);
+  }
+
+  async function createBotMatch(e: React.FormEvent) {
+    e.preventDefault();
+    setCreatingBot(true);
+    setError(null);
+    const res = await fetch("/api/matches/vs-bot", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ difficulty: botDifficulty, preferredColor: botColor }),
+    });
+    const data = await res.json();
+    setCreatingBot(false);
+    if (!res.ok) {
+      setError(data.error ?? "Erro ao criar partida vs bot");
       return;
     }
     router.push(`/match/${data.matchId}`);
@@ -201,10 +222,59 @@ export function LobbyClient() {
           </form>
         </div>
 
+        <div className="card border-accent/30 ring-1 ring-accent/20">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">🤖 Jogar contra o Bot</h3>
+            <span className="badge-accent">treino</span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Sem aposta, sem rating. Pra testar suas habilidades antes de apostar.
+          </p>
+          <form onSubmit={createBotMatch} className="mt-4 space-y-3">
+            <div>
+              <label className="label">Dificuldade</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["easy", "medium", "hard"] as const).map((d) => (
+                  <button
+                    type="button"
+                    key={d}
+                    onClick={() => setBotDifficulty(d)}
+                    className={`rounded border border-border px-2 py-2 text-sm ${
+                      botDifficulty === d ? "bg-accent text-black" : "text-muted hover:text-white"
+                    }`}
+                  >
+                    {d === "easy" ? "Fácil" : d === "medium" ? "Médio" : "Difícil"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="label">Sua cor</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["w", "random", "b"] as const).map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    onClick={() => setBotColor(c)}
+                    className={`rounded border border-border px-2 py-2 text-sm ${
+                      botColor === c ? "bg-accent text-black" : "text-muted hover:text-white"
+                    }`}
+                  >
+                    {c === "w" ? "Brancas" : c === "b" ? "Pretas" : "Aleatório"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button type="submit" disabled={creatingBot} className="btn-secondary w-full">
+              {creatingBot ? "Iniciando…" : "Começar partida"}
+            </button>
+          </form>
+        </div>
+
         <div className="card">
           <h3 className="text-lg font-semibold">Como funciona</h3>
           <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li>1. Crie ou entre em uma partida.</li>
+            <li>1. Crie ou entre em uma partida (ou jogue contra o bot).</li>
             <li>2. O valor vai pro escrow assim que ambos confirmam.</li>
             <li>3. O vencedor leva o pote (com 5% de taxa).</li>
             <li>4. Saque coins via Carteira → Sacar.</li>

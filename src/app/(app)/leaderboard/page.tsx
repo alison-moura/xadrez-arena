@@ -6,6 +6,7 @@ export default async function LeaderboardPage() {
   const { data: users } = await supabase
     .from("chess_users")
     .select("id, username, rating")
+    .eq("is_bot", false)
     .order("rating", { ascending: false })
     .limit(50);
 

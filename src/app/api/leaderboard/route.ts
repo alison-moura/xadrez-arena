@@ -9,6 +9,7 @@ export async function GET() {
   const { data: users, error } = await supabase
     .from("chess_users")
     .select("id, username, rating")
+    .eq("is_bot", false)
     .order("rating", { ascending: false })
     .limit(20);
 
