@@ -108,6 +108,16 @@ END $$;
 -- ============================================================
 -- 6. RPC atualizada: chess_create_match aceita rating_min/max
 -- ============================================================
+-- Remove qualquer versão pré-existente (a base pode ter params antigos,
+-- ex.: p_time_control_seconds — Postgres não renomeia params com CREATE OR REPLACE).
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT oid::regprocedure AS sig FROM pg_proc WHERE proname = 'chess_create_match' LOOP
+    EXECUTE 'DROP FUNCTION ' || r.sig;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION chess_create_match(
   p_user_id   text,
   p_wager     int,
@@ -158,6 +168,14 @@ END $$;
 -- ============================================================
 -- 7. RPC atualizada: chess_join_match valida faixa de rating
 -- ============================================================
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT oid::regprocedure AS sig FROM pg_proc WHERE proname = 'chess_join_match' LOOP
+    EXECUTE 'DROP FUNCTION ' || r.sig;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION chess_join_match(
   p_user_id  text,
   p_match_id text

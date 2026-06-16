@@ -24,8 +24,8 @@ type MatchData = {
   creator_id: string;
   white_user_id: string | null;
   black_user_id: string | null;
-  white_user: { id: string; username: string; rating: number } | null;
-  black_user: { id: string; username: string; rating: number } | null;
+  white_user: { id: string; username: string; rating: number; games_played?: number } | null;
+  black_user: { id: string; username: string; rating: number; games_played?: number } | null;
   winner: { id: string; username: string } | null;
 };
 
@@ -73,6 +73,11 @@ export function MatchClient({
   const [premoveStyles, setPremoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [copied, setCopied] = useState<"fen" | "pgn" | null>(null);
   const [achievements, setAchievements] = useState<EarnedAchievement[]>([]);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState<string>("cheating");
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSent, setReportSent] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const premoveRef = useRef<{ from: string; to: string } | null>(null);
   const achievementCheckedRef = useRef(false);
@@ -361,6 +366,19 @@ export function MatchClient({
     await refresh();
   }
 
+  async function sendReport() {
+    setReportError(null);
+    const res = await fetch(`/api/matches/${match.id}/report`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: reportReason, details: reportDetails }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setReportError(data.error ?? "Erro ao enviar denúncia"); return; }
+    setReportSent(true);
+    setReportOpen(false);
+  }
+
   async function copyText(text: string, type: "fen" | "pgn") {
     try {
       await navigator.clipboard.writeText(text);
@@ -397,6 +415,46 @@ export function MatchClient({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
+      {/* Report modal */}
+      {reportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-xl">
+            <h2 className="mb-4 text-lg font-semibold">Denunciar oponente</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Motivo</label>
+                <select
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  className="input w-full"
+                >
+                  <option value="cheating">Uso de engine/bot</option>
+                  <option value="stalling">Jogo lento intencional</option>
+                  <option value="abuse">Comportamento abusivo</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Detalhes (opcional)</label>
+                <textarea
+                  value={reportDetails}
+                  onChange={(e) => setReportDetails(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  className="input w-full resize-none"
+                  placeholder="Descreva o comportamento suspeito…"
+                />
+              </div>
+              {reportError && <p className="text-xs text-danger">{reportError}</p>}
+              <div className="flex gap-2">
+                <button onClick={sendReport} className="btn-danger flex-1">Enviar</button>
+                <button onClick={() => setReportOpen(false)} className="btn-secondary flex-1">Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Achievement toasts */}
       {achievements.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 space-y-2">
@@ -559,6 +617,20 @@ export function MatchClient({
                 <Link href="/achievements" className="btn-secondary text-center text-xs">
                   Ver conquistas
                 </Link>
+                {isPlayer && !isBotMatch && (
+                  reportSent ? (
+                    <div className="rounded border border-success/30 px-3 py-2 text-center text-xs text-success">
+                      Denúncia enviada ✓
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setReportOpen(true)}
+                      className="rounded border border-danger/30 px-3 py-2 text-xs text-danger transition-colors hover:border-danger/60 hover:bg-danger/10"
+                    >
+                      Denunciar oponente
+                    </button>
+                  )
+                )}
               </>
             )}
           </div>
@@ -614,7 +686,7 @@ export function MatchClient({
 function PlayerBar({
   user, color, isTurn, placeholder, captured, advantage, isMe,
 }: {
-  user: { username: string; rating: number } | null;
+  user: { username: string; rating: number; games_played?: number } | null;
   color: "w" | "b";
   isTurn: boolean;
   placeholder: string;
@@ -625,6 +697,7 @@ function PlayerBar({
   const sortedCaptures = [...captured].sort(
     (a, b) => PIECE_ORDER.indexOf(a) - PIECE_ORDER.indexOf(b)
   );
+  const isProvisional = user && (user.games_played ?? 10) < 10;
   return (
     <div className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-all duration-200 ${
       isTurn ? "border-accent/50 bg-accent/5 ring-1 ring-accent/20" : "border-border bg-surfaceAlt"
@@ -639,7 +712,9 @@ function PlayerBar({
           {user ? (
             <>
               <span className="truncate text-sm font-semibold">{isMe ? "Você" : `@${user.username}`}</span>
-              <span className="shrink-0 text-xs text-muted">({user.rating})</span>
+              <span className="shrink-0 text-xs text-muted">
+                ({user.rating}{isProvisional && <span className="text-accent">?</span>})
+              </span>
               {advantage > 0 && <span className="shrink-0 text-xs font-medium text-success">+{advantage}</span>}
             </>
           ) : (
