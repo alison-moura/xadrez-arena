@@ -1,5 +1,7 @@
 # Xadrez Arena ♞
 
+**🟢 LIVE:** https://xadrez-arena-zeta.vercel.app
+
 Plataforma de xadrez online multiplayer com sistema de apostas em coins.
 Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + service_role) + NextAuth + chess.js + react-chessboard**.
 
