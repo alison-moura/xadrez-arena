@@ -209,6 +209,14 @@ END $$;
 -- ============================================================
 -- 10. RPC chess_record_move — ELO K-factor + move_time_ms + ban check
 -- ============================================================
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT oid::regprocedure AS sig FROM pg_proc WHERE proname = 'chess_record_move' LOOP
+    EXECUTE 'DROP FUNCTION ' || r.sig;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION chess_record_move(
   p_user_id      text,
   p_match_id     text,
@@ -382,6 +390,14 @@ END $$;
 -- ============================================================
 -- 11. RPC chess_resign_match — ELO K-factor + ban check
 -- ============================================================
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT oid::regprocedure AS sig FROM pg_proc WHERE proname = 'chess_resign_match' LOOP
+    EXECUTE 'DROP FUNCTION ' || r.sig;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION chess_resign_match(
   p_user_id  text,
   p_match_id text
@@ -467,6 +483,14 @@ END $$;
 -- ============================================================
 -- 12. chess_join_match: também verifica ban do entrante
 -- ============================================================
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN SELECT oid::regprocedure AS sig FROM pg_proc WHERE proname = 'chess_join_match' LOOP
+    EXECUTE 'DROP FUNCTION ' || r.sig;
+  END LOOP;
+END $$;
+
 CREATE OR REPLACE FUNCTION chess_join_match(
   p_user_id  text,
   p_match_id text
