@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #0a0a0f;
+  color: #f1f1f5;
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-black hover:bg-accentDark;
+  }
+  .btn-secondary {
+    @apply btn bg-surfaceAlt border border-border hover:bg-border;
+  }
+  .btn-danger {
+    @apply btn bg-danger/90 text-white hover:bg-danger;
+  }
+  .card {
+    @apply rounded-xl border border-border bg-surface p-5 shadow-lg;
+  }
+  .input {
+    @apply w-full rounded-lg border border-border bg-surfaceAlt px-3 py-2 text-sm text-white placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
+  }
+  .label {
+    @apply mb-1 block text-xs uppercase tracking-wider text-muted;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full bg-surfaceAlt px-2 py-0.5 text-xs font-medium text-muted border border-border;
+  }
+  .badge-accent {
+    @apply badge bg-accent/10 border-accent/40 text-accent;
+  }
+  .badge-success {
+    @apply badge bg-success/10 border-success/40 text-success;
+  }
+  .badge-danger {
+    @apply badge bg-danger/10 border-danger/40 text-danger;
+  }
+}
