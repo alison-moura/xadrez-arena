@@ -3,6 +3,11 @@
 Plataforma de xadrez online multiplayer com sistema de apostas em coins.
 Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Prisma + PostgreSQL + NextAuth + chess.js + react-chessboard**.
 
+**Deploy em 1 clique no Vercel:**
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/alison-moura/xadrez-arena&env=DATABASE_URL,NEXTAUTH_SECRET,NEXTAUTH_URL&envDescription=Postgres%20URL%20%2B%20NextAuth%20secret&stores=%5B%7B%22type%22%3A%22postgres%22%7D%5D)
+
+Após o deploy, rode `npx prisma db push` apontando para o `DATABASE_URL` do Vercel para criar as tabelas (instruções completas abaixo).
+
 ## Recursos
 
 - Cadastro e login (NextAuth + credenciais)
