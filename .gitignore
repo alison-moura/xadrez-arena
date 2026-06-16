@@ -19,3 +19,8 @@ prisma/dev.db-journal
 Thumbs.db
 .idea/
 .vscode/
+deploy.mjs
+fix-url.mjs
+*.mjs
+!next.config.mjs
+!postcss.config.mjs

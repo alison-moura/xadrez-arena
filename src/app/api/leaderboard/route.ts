@@ -4,12 +4,16 @@ import { supabase } from "@/lib/supabase";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { data: users } = await supabase
+  const { data: users, error } = await supabase
     .from("chess_users")
     .select("id, username, rating")
     .order("rating", { ascending: false })
     .limit(20);
 
+  if (error) {
+    console.error("leaderboard users error:", JSON.stringify(error));
+    return NextResponse.json({ players: [], debug: error.message }, { status: 200 });
+  }
   if (!users) return NextResponse.json({ players: [] });
 
   const ids = users.map((u) => u.id);
