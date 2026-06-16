@@ -12,7 +12,6 @@ export const supabase: SupabaseClient =
   globalForSupabase.__sb ??
   createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
-    global: { headers: { "x-app": "xadrez-arena" } },
   });
 
 if (process.env.NODE_ENV !== "production") globalForSupabase.__sb = supabase;
