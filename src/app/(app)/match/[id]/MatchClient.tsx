@@ -14,18 +14,18 @@ type MatchData = {
   wager: number;
   pot: number;
   payout: number;
-  rakeBps: number;
+  rake_bps: number;
   status: "WAITING" | "ACTIVE" | "FINISHED" | "CANCELLED";
   result: string | null;
   fen: string;
   pgn: string;
-  moveCount: number;
-  turn: "w" | "b";
-  creatorId: string;
-  whiteUserId: string | null;
-  blackUserId: string | null;
-  whiteUser: { id: string; username: string; rating: number } | null;
-  blackUser: { id: string; username: string; rating: number } | null;
+  move_count: number;
+  turn: string;
+  creator_id: string;
+  white_user_id: string | null;
+  black_user_id: string | null;
+  white_user: { id: string; username: string; rating: number } | null;
+  black_user: { id: string; username: string; rating: number } | null;
   winner: { id: string; username: string } | null;
 };
 
@@ -39,8 +39,8 @@ export function MatchClient({
   const [match, setMatch] = useState<MatchData>(initialMatch);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const isViewerWhite = match.whiteUserId === viewerId;
-  const isViewerBlack = match.blackUserId === viewerId;
+  const isViewerWhite = match.white_user_id === viewerId;
+  const isViewerBlack = match.black_user_id === viewerId;
   const isPlayer = isViewerWhite || isViewerBlack;
   const myColor: "w" | "b" | null = isViewerWhite ? "w" : isViewerBlack ? "b" : null;
   const orientation: "white" | "black" = isViewerBlack ? "black" : "white";
@@ -62,7 +62,7 @@ export function MatchClient({
     if (!res.ok) return;
     const data = await res.json();
     setMatch((prev) => {
-      if (data.match.moveCount === prev.moveCount && data.match.status === prev.status) {
+      if (data.match.move_count === prev.move_count && data.match.status === prev.status) {
         return prev;
       }
       return data.match;
@@ -81,7 +81,6 @@ export function MatchClient({
     if (match.status !== "ACTIVE") return false;
     if (!myColor || match.turn !== myColor) return false;
 
-    // valida localmente — react-chessboard espera retorno síncrono
     const test = new Chess(match.fen);
     if (match.pgn) {
       try {
@@ -98,7 +97,6 @@ export function MatchClient({
     }
     if (!local) return false;
 
-    // dispara update no servidor sem bloquear (otimista)
     setBusy(true);
     setError(null);
     void (async () => {
@@ -141,7 +139,7 @@ export function MatchClient({
       setError(data.error ?? "Erro");
       return;
     }
-    setMatch(data.match);
+    await refresh();
   }
 
   async function joinMatch() {
@@ -153,18 +151,13 @@ export function MatchClient({
       setError(data.error ?? "Erro");
       return;
     }
-    setMatch(data.match);
+    await refresh();
   }
 
   const opponent =
-    myColor === "w"
-      ? match.blackUser
-      : myColor === "b"
-        ? match.whiteUser
-        : null;
-
+    myColor === "w" ? match.black_user : myColor === "b" ? match.white_user : null;
   const me =
-    myColor === "w" ? match.whiteUser : myColor === "b" ? match.blackUser : null;
+    myColor === "w" ? match.white_user : myColor === "b" ? match.black_user : null;
 
   const inCheck = chess.inCheck?.() ?? false;
   const isMyTurn = isPlayer && match.status === "ACTIVE" && match.turn === myColor;
@@ -185,9 +178,7 @@ export function MatchClient({
             color={myColor === "w" ? "b" : "w"}
             isTurn={match.status === "ACTIVE" && match.turn !== myColor && !!myColor}
             placeholder={
-              match.status === "WAITING"
-                ? "Aguardando oponente…"
-                : "Sem oponente"
+              match.status === "WAITING" ? "Aguardando oponente…" : "Sem oponente"
             }
           />
 
@@ -231,7 +222,7 @@ export function MatchClient({
         <div className="card">
           <div className="flex items-center justify-between">
             <span className="text-xs uppercase tracking-wider text-muted">Pote</span>
-            <span className="badge-accent">{Math.round((match.rakeBps / 100))}% rake</span>
+            <span className="badge-accent">{Math.round(match.rake_bps / 100)}% rake</span>
           </div>
           <div className="mt-1 text-3xl font-bold text-accent">
             {formatCoins(match.pot)} <span className="text-base text-muted">coins</span>
@@ -258,7 +249,7 @@ export function MatchClient({
             {match.status === "WAITING" && (
               <p>
                 Aguardando segundo jogador.{" "}
-                {match.creatorId === viewerId
+                {match.creator_id === viewerId
                   ? "Você é o anfitrião."
                   : "Você pode entrar abaixo."}
               </p>
@@ -282,15 +273,11 @@ export function MatchClient({
 
           <div className="mt-4 flex flex-col gap-2">
             {match.status === "WAITING" && !isPlayer && (
-              <button
-                onClick={joinMatch}
-                disabled={busy}
-                className="btn-primary"
-              >
+              <button onClick={joinMatch} disabled={busy} className="btn-primary">
                 Entrar na partida ({formatCoins(match.wager)} coins)
               </button>
             )}
-            {match.status === "WAITING" && match.creatorId === viewerId && (
+            {match.status === "WAITING" && match.creator_id === viewerId && (
               <button onClick={cancel} disabled={busy} className="btn-danger">
                 Cancelar partida
               </button>
@@ -310,7 +297,7 @@ export function MatchClient({
 
         <div className="card">
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-            Lances ({match.moveCount})
+            Lances ({match.move_count})
           </h3>
           <div className="mt-2 max-h-60 overflow-y-auto text-sm">
             <PgnList pgn={match.pgn} />

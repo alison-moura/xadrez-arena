@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { supabase, rpcError } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,6 @@ const schema = z.object({
   method: z.string().min(2).max(50),
   destination: z.string().min(3).max(200),
 });
-
-const MIN_WITHDRAWAL = 100;
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -23,50 +21,16 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
-  if (parsed.data.amount < MIN_WITHDRAWAL) {
-    return NextResponse.json(
-      { error: `Valor mínimo de saque: ${MIN_WITHDRAWAL} coins` },
-      { status: 400 }
-    );
+  const { data, error } = await supabase.rpc("chess_request_withdrawal", {
+    p_user_id: session.user.id,
+    p_amount: parsed.data.amount,
+    p_method: parsed.data.method,
+    p_destination: parsed.data.destination,
+  });
+  if (error) {
+    return NextResponse.json({ error: rpcError(error) }, { status: 400 });
   }
-
-  try {
-    const out = await prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId: session.user.id } });
-      if (!wallet) throw new Error("Carteira não encontrada");
-      if (wallet.balance < parsed.data.amount) throw new Error("Saldo insuficiente");
-
-      const updated = await tx.wallet.update({
-        where: { userId: session.user.id },
-        data: { balance: { decrement: parsed.data.amount } },
-      });
-      await tx.transaction.create({
-        data: {
-          userId: session.user.id,
-          type: "WITHDRAWAL",
-          amount: -parsed.data.amount,
-          balanceAfter: updated.balance,
-          note: `Saque solicitado via ${parsed.data.method}`,
-        },
-      });
-      const wr = await tx.withdrawalRequest.create({
-        data: {
-          userId: session.user.id,
-          amount: parsed.data.amount,
-          method: parsed.data.method,
-          destination: parsed.data.destination,
-          status: "PENDING",
-        },
-      });
-      return { wallet: updated, withdrawal: wr };
-    });
-    return NextResponse.json({ ok: true, ...out });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Erro" },
-      { status: 400 }
-    );
-  }
+  return NextResponse.json({ ok: true, ...(data as object) });
 }
 
 export async function GET() {
@@ -74,10 +38,11 @@ export async function GET() {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
-  const list = await prisma.withdrawalRequest.findMany({
-    where: { userId: session.user.id },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
-  return NextResponse.json({ withdrawals: list });
+  const { data } = await supabase
+    .from("chess_withdrawal_requests")
+    .select("id, amount, method, destination, status, created_at")
+    .eq("user_id", session.user.id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return NextResponse.json({ withdrawals: data ?? [] });
 }

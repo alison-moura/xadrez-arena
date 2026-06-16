@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { lockForWager } from "@/lib/wallet";
+import { supabase, rpcError } from "@/lib/supabase";
+import type { MatchStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -16,20 +16,23 @@ export async function GET(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
-
   const { searchParams } = new URL(req.url);
-  const status = searchParams.get("status") ?? "WAITING";
+  const status = (searchParams.get("status") ?? "WAITING") as MatchStatus;
 
-  const matches = await prisma.match.findMany({
-    where: { status: status as "WAITING" | "ACTIVE" | "FINISHED" | "CANCELLED" },
-    include: {
-      whiteUser: { select: { id: true, username: true, rating: true } },
-      blackUser: { select: { id: true, username: true, rating: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
-  return NextResponse.json({ matches });
+  const { data, error } = await supabase
+    .from("chess_matches")
+    .select(
+      `id, wager, status, created_at, white_user_id, black_user_id,
+       white_user:white_user_id(id, username, rating),
+       black_user:black_user_id(id, username, rating)`
+    )
+    .eq("status", status)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ matches: data ?? [] });
 }
 
 export async function POST(req: Request) {
@@ -42,41 +45,13 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
-
-  const { wager, preferredColor } = parsed.data;
-
-  try {
-    const match = await prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { userId: session.user.id } });
-      if (!wallet) throw new Error("Carteira não encontrada");
-      if (wallet.balance < wager) throw new Error("Saldo insuficiente para a aposta");
-
-      let color: "w" | "b";
-      if (preferredColor === "random") color = Math.random() < 0.5 ? "w" : "b";
-      else color = preferredColor;
-
-      const created = await tx.match.create({
-        data: {
-          wager,
-          status: "WAITING",
-          creatorId: session.user.id,
-          whiteUserId: color === "w" ? session.user.id : null,
-          blackUserId: color === "b" ? session.user.id : null,
-          pot: wager, // só o criador ainda
-        },
-      });
-
-      if (wager > 0) {
-        await lockForWager(tx, session.user.id, wager, created.id);
-      }
-
-      return created;
-    });
-    return NextResponse.json({ ok: true, matchId: match.id });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Erro ao criar partida" },
-      { status: 400 }
-    );
+  const { data, error } = await supabase.rpc("chess_create_match", {
+    p_user_id: session.user.id,
+    p_wager: parsed.data.wager,
+    p_color: parsed.data.preferredColor,
+  });
+  if (error) {
+    return NextResponse.json({ error: rpcError(error) }, { status: 400 });
   }
+  return NextResponse.json({ ok: true, matchId: (data as { match_id: string }).match_id });
 }

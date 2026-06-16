@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { supabase, rpcError } from "@/lib/supabase";
 import { applyMove } from "@/lib/chess-engine";
-import { consumeEscrow, payWinner, refundFromEscrow } from "@/lib/wallet";
-import type { MatchResult, MatchStatus } from "@prisma/client";
+import type { ChessMatch } from "@/lib/types";
 
 const schema = z.object({
   from: z.string().length(2),
@@ -26,93 +25,60 @@ export async function POST(
     return NextResponse.json({ error: "Lance inválido" }, { status: 400 });
   }
 
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      const match = await tx.match.findUnique({ where: { id: params.id } });
-      if (!match) throw new Error("Partida não encontrada");
-      if (match.status !== "ACTIVE") throw new Error("Partida não está ativa");
+  const { data: match, error: matchErr } = await supabase
+    .from("chess_matches")
+    .select("id, status, white_user_id, black_user_id, turn, fen, pgn, move_count")
+    .eq("id", params.id)
+    .maybeSingle<Pick<ChessMatch, "id" | "status" | "white_user_id" | "black_user_id" | "turn" | "fen" | "pgn" | "move_count">>();
 
-      const userId = session.user.id;
-      const isWhite = match.whiteUserId === userId;
-      const isBlack = match.blackUserId === userId;
-      if (!isWhite && !isBlack) throw new Error("Você não está nesta partida");
-
-      const myColor = isWhite ? "w" : "b";
-      if (match.turn !== myColor) throw new Error("Não é sua vez de jogar");
-
-      const moveRes = applyMove(match.fen, match.pgn, parsed.data);
-      if (!moveRes) throw new Error("Lance ilegal");
-
-      const newPly = match.moveCount + 1;
-
-      await tx.move.create({
-        data: {
-          matchId: match.id,
-          ply: newPly,
-          san: moveRes.san,
-          uci: moveRes.uci,
-          fenAfter: moveRes.fen,
-          byUserId: userId,
-        },
-      });
-
-      let status: MatchStatus = match.status;
-      let matchResult: MatchResult | null = null;
-      let winnerId: string | null = null;
-      let finishedAt: Date | null = null;
-      let payout = 0;
-
-      if (moveRes.isGameOver) {
-        status = "FINISHED";
-        finishedAt = new Date();
-        if (moveRes.isCheckmate) {
-          // a vez do oponente foi quem levou mate -> quem jogou venceu
-          winnerId = userId;
-          matchResult = isWhite ? "WHITE_WIN" : "BLACK_WIN";
-        } else {
-          matchResult = "DRAW";
-        }
-
-        if (matchResult === "DRAW") {
-          // devolve aposta para ambos
-          if (match.whiteUserId && match.wager > 0)
-            await refundFromEscrow(tx, match.whiteUserId, match.wager, match.id);
-          if (match.blackUserId && match.wager > 0)
-            await refundFromEscrow(tx, match.blackUserId, match.wager, match.id);
-        } else if (winnerId) {
-          const loserId = winnerId === match.whiteUserId ? match.blackUserId : match.whiteUserId;
-          const pot = match.wager * 2;
-          const rake = Math.floor((pot * match.rakeBps) / 10000);
-          payout = pot - rake;
-          if (match.wager > 0 && loserId) {
-            await consumeEscrow(tx, loserId, match.wager, match.id);
-            await payWinner(tx, winnerId, match.wager, payout, match.id);
-          }
-        }
-      }
-
-      const updated = await tx.match.update({
-        where: { id: match.id },
-        data: {
-          fen: moveRes.fen,
-          pgn: moveRes.pgn,
-          moveCount: newPly,
-          turn: moveRes.turn,
-          status,
-          result: matchResult,
-          winnerId,
-          finishedAt: finishedAt ?? undefined,
-          payout: payout || match.payout,
-        },
-      });
-
-      return updated;
-    });
-    return NextResponse.json({ ok: true, match: result });
-  } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Erro no lance" },
-      { status: 400 }
-    );
+  if (matchErr || !match) {
+    return NextResponse.json({ error: "Partida não encontrada" }, { status: 404 });
   }
+  if (match.status !== "ACTIVE") {
+    return NextResponse.json({ error: "Partida não está ativa" }, { status: 400 });
+  }
+  const isWhite = match.white_user_id === session.user.id;
+  const isBlack = match.black_user_id === session.user.id;
+  if (!isWhite && !isBlack) {
+    return NextResponse.json({ error: "Você não está nesta partida" }, { status: 403 });
+  }
+  const myColor = isWhite ? "w" : "b";
+  if (match.turn !== myColor) {
+    return NextResponse.json({ error: "Não é sua vez" }, { status: 400 });
+  }
+
+  const moveRes = applyMove(match.fen, match.pgn, parsed.data);
+  if (!moveRes) {
+    return NextResponse.json({ error: "Lance ilegal" }, { status: 400 });
+  }
+
+  const { error: rpcErr } = await supabase.rpc("chess_record_move", {
+    p_user_id: session.user.id,
+    p_match_id: params.id,
+    p_fen: moveRes.fen,
+    p_pgn: moveRes.pgn,
+    p_san: moveRes.san,
+    p_uci: moveRes.uci,
+    p_turn: moveRes.turn,
+    p_is_checkmate: moveRes.isCheckmate,
+    p_is_draw: moveRes.isDraw || moveRes.isStalemate,
+    p_is_game_over: moveRes.isGameOver,
+  });
+  if (rpcErr) {
+    return NextResponse.json({ error: rpcError(rpcErr) }, { status: 400 });
+  }
+
+  // retorna estado atualizado
+  const { data: updated } = await supabase
+    .from("chess_matches")
+    .select(
+      `*,
+       white_user:white_user_id(id, username, rating),
+       black_user:black_user_id(id, username, rating),
+       winner:winner_id(id, username)`
+    )
+    .eq("id", params.id)
+    .maybeSingle();
+
+  return NextResponse.json({ ok: true, match: updated });
 }

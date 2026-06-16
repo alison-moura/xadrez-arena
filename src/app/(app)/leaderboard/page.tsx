@@ -1,18 +1,26 @@
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeaderboardPage() {
-  const players = await prisma.user.findMany({
-    orderBy: { rating: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      username: true,
-      rating: true,
-      _count: { select: { matchesWon: true } },
-    },
-  });
+  const { data: users } = await supabase
+    .from("chess_users")
+    .select("id, username, rating")
+    .order("rating", { ascending: false })
+    .limit(50);
+
+  const ids = (users ?? []).map((u) => u.id);
+  const winCount = new Map<string, number>();
+  if (ids.length) {
+    const { data: wins } = await supabase
+      .from("chess_matches")
+      .select("winner_id")
+      .in("winner_id", ids)
+      .eq("status", "FINISHED");
+    for (const w of wins ?? []) {
+      if (w.winner_id) winCount.set(w.winner_id, (winCount.get(w.winner_id) ?? 0) + 1);
+    }
+  }
 
   return (
     <div>
@@ -28,15 +36,15 @@ export default async function LeaderboardPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {players.map((p, i) => (
+            {(users ?? []).map((p, i) => (
               <tr key={p.id}>
                 <td className="px-4 py-3 font-semibold text-muted">{i + 1}</td>
                 <td className="px-4 py-3">@{p.username}</td>
                 <td className="px-4 py-3 text-right font-mono">{p.rating}</td>
-                <td className="px-4 py-3 text-right">{p._count.matchesWon}</td>
+                <td className="px-4 py-3 text-right">{winCount.get(p.id) ?? 0}</td>
               </tr>
             ))}
-            {players.length === 0 && (
+            {(!users || users.length === 0) && (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-center text-muted">
                   Sem jogadores ainda.

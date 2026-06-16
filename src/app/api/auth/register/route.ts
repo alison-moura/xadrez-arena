@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { supabase, rpcError } from "@/lib/supabase";
 
 const schema = z.object({
   username: z
@@ -14,52 +14,28 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const parsed = schema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
-        { status: 400 }
-      );
-    }
-    const username = parsed.data.username.toLowerCase();
-    const email = parsed.data.email.toLowerCase();
-
-    const exists = await prisma.user.findFirst({
-      where: { OR: [{ email }, { username }] },
-    });
-    if (exists) {
-      return NextResponse.json(
-        { error: "Usuário ou email já cadastrado" },
-        { status: 409 }
-      );
-    }
-
-    const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-
-    const user = await prisma.user.create({
-      data: {
-        username,
-        email,
-        passwordHash,
-        wallet: { create: { balance: 1000, locked: 0 } },
-      },
-    });
-
-    await prisma.transaction.create({
-      data: {
-        userId: user.id,
-        type: "DEPOSIT",
-        amount: 1000,
-        balanceAfter: 1000,
-        note: "Bônus de boas-vindas",
-      },
-    });
-
-    return NextResponse.json({ ok: true, userId: user.id });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Erro interno" }, { status: 500 });
+  const body = await req.json().catch(() => ({}));
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Dados inválidos" },
+      { status: 400 }
+    );
   }
+  const username = parsed.data.username.toLowerCase();
+  const email = parsed.data.email.toLowerCase();
+  const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+
+  const { data, error } = await supabase.rpc("chess_register_user", {
+    p_username: username,
+    p_email: email,
+    p_password_hash: passwordHash,
+  });
+  if (error) {
+    return NextResponse.json(
+      { error: rpcError(error) },
+      { status: error.message?.includes("duplicate_") ? 409 : 400 }
+    );
+  }
+  return NextResponse.json({ ok: true, userId: (data as { user_id: string }).user_id });
 }

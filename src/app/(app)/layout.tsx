@@ -1,14 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getOrCreateWallet } from "@/lib/wallet";
+import { supabase } from "@/lib/supabase";
 import { formatCoins } from "@/lib/utils";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  const wallet = await getOrCreateWallet(session.user.id);
+
+  const { data: wallet } = await supabase
+    .from("chess_wallets")
+    .select("balance, locked")
+    .eq("user_id", session.user.id)
+    .maybeSingle();
+
+  const balance = wallet?.balance ?? 0;
+  const locked = wallet?.locked ?? 0;
 
   return (
     <div className="min-h-screen">
@@ -40,11 +48,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className="hidden items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm md:inline-flex"
             >
               <span className="text-accent">●</span>
-              <span className="font-semibold">{formatCoins(wallet.balance)}</span>
+              <span className="font-semibold">{formatCoins(balance)}</span>
               <span className="text-xs text-muted">coins</span>
-              {wallet.locked > 0 && (
+              {locked > 0 && (
                 <span className="ml-1 rounded bg-surfaceAlt px-1.5 py-0.5 text-[10px] text-muted">
-                  🔒 {formatCoins(wallet.locked)}
+                  🔒 {formatCoins(locked)}
                 </span>
               )}
             </Link>

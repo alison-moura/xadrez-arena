@@ -1,8 +1,9 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import { supabase } from "@/lib/supabase";
 import { getServerSession } from "next-auth";
+import type { ChessUser } from "@/lib/types";
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -17,15 +18,16 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.identifier || !credentials.password) return null;
         const id = credentials.identifier.trim().toLowerCase();
-        const user = await prisma.user.findFirst({
-          where: {
-            OR: [{ email: id }, { username: id }],
-          },
-        });
-        if (!user) return null;
-        const ok = await bcrypt.compare(credentials.password, user.passwordHash);
+        const { data, error } = await supabase
+          .from("chess_users")
+          .select("id, username, email, password_hash")
+          .or(`email.eq.${id},username.eq.${id}`)
+          .limit(1)
+          .maybeSingle<ChessUser>();
+        if (error || !data) return null;
+        const ok = await bcrypt.compare(credentials.password, data.password_hash);
         if (!ok) return null;
-        return { id: user.id, name: user.username, email: user.email };
+        return { id: data.id, name: data.username, email: data.email };
       },
     }),
   ],
