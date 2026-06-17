@@ -14,7 +14,7 @@ export default async function ReviewPage({ params }: { params: { id: string } })
     .select(
       `id, pgn, fen, status, result, move_count, bot_difficulty,
        white_user_id, black_user_id, winner_id,
-       white_avg_cpl, black_avg_cpl, white_accuracy, black_accuracy, analyzed_at,
+       white_avg_cpl, black_avg_cpl, white_accuracy, black_accuracy, move_cpls, analyzed_at,
        white_user:white_user_id(id, username, rating),
        black_user:black_user_id(id, username, rating),
        winner:winner_id(id, username)`

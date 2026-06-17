@@ -26,11 +26,21 @@ type MatchData = {
   black_avg_cpl: number | null;
   white_accuracy: number | null;
   black_accuracy: number | null;
+  move_cpls: number[] | null;
   analyzed_at: string | null;
   white_user: Player;
   black_user: Player;
   winner: { id: string; username: string } | null;
 };
+
+// Marcador de qualidade por CPL (estilo chess.com)
+function moveMark(cpl: number): { mark: string; label: string; color: string } | null {
+  if (cpl >= 300) return { mark: "??", label: "Blunder",    color: "text-danger" };
+  if (cpl >= 150) return { mark: "?",  label: "Erro",       color: "text-red-400" };
+  if (cpl >= 60)  return { mark: "?!", label: "Imprecisão", color: "text-yellow-400" };
+  if (cpl <= 10)  return { mark: "✓",  label: "Preciso",    color: "text-success" };
+  return null;
+}
 
 export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: string }) {
   const isPlayer = match.white_user_id === viewerId || match.black_user_id === viewerId;
@@ -53,6 +63,7 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analyzed, setAnalyzed] = useState(!!match.analyzed_at);
+  const [moveCpls, setMoveCpls] = useState<number[] | null>(match.move_cpls ?? null);
 
   // PGN → positions array
   const positions = useMemo<string[]>(() => {
@@ -148,22 +159,18 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
       setProgress({ done: 0, total });
 
       let whiteCpl = 0, blackCpl = 0, wc = 0, bc = 0;
+      const allCpls: number[] = [];
 
       // Avalia depth 10 — bom equilíbrio entre precisão e velocidade
       const depth = 10;
       let prevCp = (await sf.evaluate(fens[0], depth)).cp;
       for (let i = 1; i <= total; i++) {
         const currentCp = (await sf.evaluate(fens[i], depth)).cp;
-        // Quem acabou de jogar: lado oposto ao "side-to-move" atual.
-        // cp em fens[i] é do POV do lado a mover; o lado que jogou viu
-        // sua avaliação inverter de sinal entre i-1 e i.
-        const moverPrevCp = prevCp;         // POV do mover (jogador i-1)
-        const moverNewCp  = -currentCp;     // POV invertido pelo lance
+        const moverPrevCp = prevCp;
+        const moverNewCp  = -currentCp;
         const cpl = Math.max(0, moverPrevCp - moverNewCp);
+        allCpls.push(cpl);
 
-        // Alterna cores: se i é par, brancas acabaram de jogar (na verdade i ímpar = brancas)
-        // fens[0] = posição inicial (brancas a mover). fens[1] = após branco jogar (pretas a mover).
-        // Então em i=1 quem moveu foi branco. i ímpar → branco.
         const movedWhite = (i % 2) === 1;
         if (movedWhite) { whiteCpl += cpl; wc++; }
         else            { blackCpl += cpl; bc++; }
@@ -183,6 +190,7 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
       };
       setAnalysis(result);
       setAnalyzed(true);
+      setMoveCpls(allCpls);
 
       // Persiste no banco (não bloqueante)
       void fetch(`/api/matches/${match.id}/analysis-persist`, {
@@ -193,6 +201,7 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
           blackAvgCpl:   result.black_avg_cpl,
           whiteAccuracy: result.white_accuracy,
           blackAccuracy: result.black_accuracy,
+          moveCpls:      allCpls.map((c) => Math.round(c)),
         }),
       });
     } catch (e) {
@@ -356,25 +365,48 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
             </h3>
             <div className="scrollbar-thin max-h-80 overflow-y-auto">
               <ol className="space-y-0.5 font-mono text-xs">
-                {pairs.map((p) => (
-                  <li key={p.num} className="flex gap-2 rounded px-1 py-0.5 hover:bg-surfaceAlt">
-                    <span className="w-5 shrink-0 text-muted">{p.num}.</span>
-                    <button
-                      onClick={() => p.wIdx && setPly(p.wIdx)}
-                      className={`w-14 shrink-0 cursor-pointer rounded px-1 text-left hover:bg-accent/10 ${
-                        p.wIdx === ply ? "bg-accent/30 font-bold text-accent" : ""
-                      }`}
-                    >{p.w ?? ""}</button>
-                    <button
-                      onClick={() => p.bIdx && setPly(p.bIdx)}
-                      className={`w-14 shrink-0 cursor-pointer rounded px-1 text-left hover:bg-accent/10 ${
-                        p.bIdx === ply ? "bg-accent/30 font-bold text-accent" : ""
-                      }`}
-                    >{p.b ?? ""}</button>
-                  </li>
-                ))}
+                {pairs.map((p) => {
+                  // moveCpls é 0-based pra plies (i=0 é primeiro lance, white)
+                  const wCpl = p.wIdx ? moveCpls?.[p.wIdx - 1] : undefined;
+                  const bCpl = p.bIdx ? moveCpls?.[p.bIdx - 1] : undefined;
+                  const wMark = wCpl != null ? moveMark(wCpl) : null;
+                  const bMark = bCpl != null ? moveMark(bCpl) : null;
+                  return (
+                    <li key={p.num} className="flex gap-2 rounded px-1 py-0.5 hover:bg-surfaceAlt">
+                      <span className="w-5 shrink-0 text-muted">{p.num}.</span>
+                      <button
+                        onClick={() => p.wIdx && setPly(p.wIdx)}
+                        title={wMark ? `${wMark.label} (${wCpl?.toFixed(0)} cpl)` : (wCpl != null ? `${wCpl.toFixed(0)} cpl` : "")}
+                        className={`flex w-20 shrink-0 cursor-pointer items-center gap-1 rounded px-1 text-left hover:bg-accent/10 ${
+                          p.wIdx === ply ? "bg-accent/30 font-bold text-accent" : ""
+                        }`}
+                      >
+                        <span className="truncate">{p.w ?? ""}</span>
+                        {wMark && <span className={`text-[10px] ${wMark.color}`}>{wMark.mark}</span>}
+                      </button>
+                      <button
+                        onClick={() => p.bIdx && setPly(p.bIdx)}
+                        title={bMark ? `${bMark.label} (${bCpl?.toFixed(0)} cpl)` : (bCpl != null ? `${bCpl.toFixed(0)} cpl` : "")}
+                        className={`flex w-20 shrink-0 cursor-pointer items-center gap-1 rounded px-1 text-left hover:bg-accent/10 ${
+                          p.bIdx === ply ? "bg-accent/30 font-bold text-accent" : ""
+                        }`}
+                      >
+                        <span className="truncate">{p.b ?? ""}</span>
+                        {bMark && <span className={`text-[10px] ${bMark.color}`}>{bMark.mark}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
               </ol>
             </div>
+            {moveCpls && (
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
+                <span><span className="text-success">✓</span> preciso</span>
+                <span><span className="text-yellow-400">?!</span> imprecisão</span>
+                <span><span className="text-red-400">?</span> erro</span>
+                <span><span className="text-danger">??</span> blunder</span>
+              </div>
+            )}
           </div>
         </aside>
       </div>

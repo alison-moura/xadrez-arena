@@ -11,6 +11,7 @@ const schema = z.object({
   blackAvgCpl:   z.number().min(0).max(5000),
   whiteAccuracy: z.number().min(0).max(100),
   blackAccuracy: z.number().min(0).max(100),
+  moveCpls:      z.array(z.number().min(0).max(50000)).max(500).optional(),
 });
 
 export async function POST(
@@ -60,6 +61,7 @@ export async function POST(
       black_avg_cpl:  parsed.data.blackAvgCpl,
       white_accuracy: parsed.data.whiteAccuracy,
       black_accuracy: parsed.data.blackAccuracy,
+      move_cpls:      parsed.data.moveCpls ?? null,
       analyzed_at:    new Date().toISOString(),
     })
     .eq("id", params.id);
