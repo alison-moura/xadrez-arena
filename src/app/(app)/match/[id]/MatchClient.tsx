@@ -956,7 +956,11 @@ export function MatchClient({
   async function requestRematch() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/matches/${match.id}/rematch`, { method: "POST" });
+    const res = await fetch(`/api/matches/${match.id}/rematch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "request" }),
+    });
     const data = await res.json();
     setBusy(false);
     if (!res.ok) { setError(data.error ?? "Erro"); return; }
@@ -968,6 +972,20 @@ export function MatchClient({
     } else {
       await refresh();
     }
+  }
+
+  async function cancelRematch() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/matches/${match.id}/rematch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    const data = await res.json();
+    setBusy(false);
+    if (!res.ok) { setError(data.error ?? "Erro"); return; }
+    await refresh();
   }
 
   async function sendReport() {
@@ -1189,8 +1207,13 @@ export function MatchClient({
                 ) : rematchOfferedByOpp ? (
                   <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">🔁 Aceitar revanche</button>
                 ) : rematchOfferedByMe ? (
-                  <div className="col-span-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-center text-xs text-accent">
-                    Aguardando revanche…
+                  <div className="col-span-2 flex items-center gap-2">
+                    <div className="flex-1 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-center text-xs text-accent">
+                      Aguardando revanche…
+                    </div>
+                    <button onClick={cancelRematch} disabled={busy} className="rounded-lg border border-border bg-surfaceAlt px-3 py-2 text-xs text-muted hover:border-danger/40 hover:text-danger">
+                      Cancelar
+                    </button>
                   </div>
                 ) : (
                   <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">🔁 Revanche</button>
@@ -1562,7 +1585,10 @@ export function MatchClient({
                   match.rematch_match_id ? (
                     <Link href={`/match/${match.rematch_match_id}`} className="btn-primary text-center">Ir para o rematch</Link>
                   ) : rematchOfferedByMe ? (
-                    <div className="rounded border border-accent/30 px-3 py-2 text-center text-xs text-accent">Aguardando oponente aceitar o rematch…</div>
+                    <div className="flex gap-2">
+                      <div className="flex-1 rounded border border-accent/30 px-3 py-2 text-center text-xs text-accent">Aguardando…</div>
+                      <button onClick={cancelRematch} disabled={busy} className="rounded border border-border bg-surfaceAlt px-3 py-2 text-xs text-muted hover:border-danger/40 hover:text-danger">Cancelar</button>
+                    </div>
                   ) : rematchOfferedByOpp ? (
                     <button onClick={requestRematch} disabled={busy} className="btn-primary">Aceitar rematch</button>
                   ) : (

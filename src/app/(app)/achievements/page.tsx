@@ -15,19 +15,21 @@ type Achievement = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  partidas: "Partidas",
-  xadrez: "Xadrez",
-  bot: "Bot",
-  rating: "Rating",
-  apostas: "Apostas",
+  partidas:  "Partidas",
+  xadrez:    "Xadrez",
+  bot:       "Bot",
+  rating:    "Rating",
+  apostas:   "Apostas",
+  overwatch: "Overwatch",
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
-  partidas: "♟",
-  xadrez: "♔",
-  bot: "🤖",
-  rating: "📈",
-  apostas: "💰",
+  partidas:  "♟",
+  xadrez:    "♔",
+  bot:       "🤖",
+  rating:    "📈",
+  apostas:   "💰",
+  overwatch: "⚖️",
 };
 
 export const dynamic = "force-dynamic";
