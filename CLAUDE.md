@@ -245,6 +245,23 @@ Implementado 100% client-side em `MatchClient.tsx`:
 - [ ] Rate limiting distribuído (Upstash/Redis) — hoje é in-memory por processo
 - [ ] Detecção de cheating em background — já tem Stockfish analysis nos endpoints; falta job recorrente
 
+## Melhorias da página de jogo (commit d5566c7)
+
+Inspiradas em lichess/chess.com:
+
+- **Sons sintetizados** (`src/lib/sounds.ts`) via Web Audio, sem assets externos. Eventos: move/capture/check/castle/promote/start/winSelf/loseSelf/draw/lowTime/notify/click. Mute persistente em `localStorage` (`xa.muted`). Toggle 🔊 na header + tecla **M**.
+- **Anotações de casa por right-click**: 3 cores cíclicas (verde → vermelho → azul → off). Esc limpa todas. Se houver pré-lance ativo, right-click ainda cancela ele primeiro.
+- **Seta dourada do último lance** via `customArrows` do react-chessboard.
+- **Atalhos de teclado**: ← → navegam lances, ↑/Home início, ↓/End ao vivo, F inverte tabuleiro (override temporário), M mute, Esc limpa marcações/pré-lance.
+- **Modal de fim de jogo** full-screen com emoji contextual (👑/😔/🤝/🏁), motivo, payout, CTA de rematch e botão "Ver tabuleiro" pra fechar.
+- **Picker de promoção na própria casa**: pilha vertical Q/R/B/N posicionada sobre o square de destino (substitui modal central).
+- **Detecção de abertura** (`src/lib/openings.ts`): mini-DB ECO com ~65 entradas, mostra o nome embaixo do tabuleiro até o lance 20.
+- **Reivindicar empate**: detecção client-side via `chess.js` (`isThreefoldRepetition`, `isInsufficientMaterial`, `isDraw`); banner azul aparece quando aplicável. `POST /api/matches/[id]/claim-draw` → RPC `chess_claim_draw` (migration 0006).
+- **Animação +Ns**: pequeno texto flutuante sobre o relógio quando incremento é aplicado. Keyframe `floatUp` em globals.css.
+- **Pulse no clock** quando tempo < 30s.
+- **Beep de tempo curto**: som curto a cada segundo entre 10s e 0 quando é nossa vez.
+- **Cheat-sheet de atalhos** exibido sob o tabuleiro durante partida ativa.
+
 ## Features implementadas (migration 0005)
 
 - **Relógio**: `time_control_seconds`, `time_increment_seconds`, `white_time_ms`, `black_time_ms`, `last_move_at` em `chess_matches`. RPC `chess_record_move` debita tempo + soma incremento. `chess_flag_time` reivindica perda por tempo. Auto-flag no client quando o tempo expira.
