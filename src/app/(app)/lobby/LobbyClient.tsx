@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { formatCoins, formatDate } from "@/lib/utils";
+import { formatCoins, timeAgo } from "@/lib/utils";
 
 type Match = {
   id: string;
@@ -353,7 +353,8 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
                         <div className="mt-0.5 text-xs text-muted">
                           Joga de {hostColorLabel} • pot{" "}
                           <span className="text-accent">{formatCoins(m.wager * 2)}</span> •{" "}
-                          {formatDate(m.created_at)} • <span className="text-muted">{formatTC(m.time_control_seconds, m.time_increment_seconds)}</span>
+                          esperando há <span className="text-white">{timeAgo(m.created_at)}</span> •{" "}
+                          <span className="text-muted">{formatTC(m.time_control_seconds, m.time_increment_seconds)}</span>
                         </div>
                       </div>
                     </div>
