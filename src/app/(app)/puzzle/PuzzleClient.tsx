@@ -18,6 +18,7 @@ type StoredState = {
   totalSolved: number;
   totalAttempts: number;
   byPuzzle: Record<string, { solved: boolean; hintsUsed: number; timeMs: number; mistakes: number }>;
+  favorites: string[];
 };
 
 const STORAGE_KEY = "xa.puzzle.v1";
@@ -34,6 +35,7 @@ function loadState(): StoredState {
       totalSolved: parsed.totalSolved ?? 0,
       totalAttempts: parsed.totalAttempts ?? 0,
       byPuzzle: parsed.byPuzzle ?? {},
+      favorites: parsed.favorites ?? [],
     };
   } catch {
     return emptyState();
@@ -41,8 +43,16 @@ function loadState(): StoredState {
 }
 
 function emptyState(): StoredState {
-  return { lastDay: "", streak: 0, totalSolved: 0, totalAttempts: 0, byPuzzle: {} };
+  return { lastDay: "", streak: 0, totalSolved: 0, totalAttempts: 0, byPuzzle: {}, favorites: [] };
 }
+
+type RatingFilter = "all" | "easy" | "medium" | "hard";
+const RATING_FILTERS: { value: RatingFilter; label: string; min: number; max: number }[] = [
+  { value: "all",    label: "Todos",  min: 0,    max: 9999 },
+  { value: "easy",   label: "Fácil",  min: 0,    max: 800 },
+  { value: "medium", label: "Médio",  min: 801,  max: 1300 },
+  { value: "hard",   label: "Difícil",min: 1301, max: 9999 },
+];
 
 function saveState(s: StoredState) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
@@ -77,6 +87,10 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
   const [stored, setStored] = useState<StoredState>(emptyState);
   const [practiceList] = useState<PuzzleDef[]>(() => [...PUZZLE_BANK].sort((a, b) => a.rating - b.rating));
   const [currentId, setCurrentId] = useState(puzzle.id);
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
+  const [themeFilter, setThemeFilter] = useState<string>("");
+  const [hideSolved, setHideSolved] = useState(false);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
   const isDailyRef = useRef(currentId === puzzle.id);
 
   // Carrega estado salvo
@@ -300,6 +314,41 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
 
   const sideToMoveLabel = playerColor === "w" ? "Brancas" : "Pretas";
   const solvedById = stored.byPuzzle[currentId]?.solved;
+  const isFavoriteCurrent = stored.favorites.includes(currentId);
+
+  const allThemes = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of PUZZLE_BANK) for (const t of p.themes) s.add(t);
+    return Array.from(s).sort();
+  }, []);
+
+  const filteredPractice = useMemo(() => {
+    const r = RATING_FILTERS.find((rf) => rf.value === ratingFilter)!;
+    return practiceList.filter((p) => {
+      if (p.rating < r.min || p.rating > r.max) return false;
+      if (themeFilter && !p.themes.includes(themeFilter)) return false;
+      if (hideSolved && stored.byPuzzle[p.id]?.solved) return false;
+      if (onlyFavorites && !stored.favorites.includes(p.id)) return false;
+      return true;
+    });
+  }, [practiceList, ratingFilter, themeFilter, hideSolved, onlyFavorites, stored]);
+
+  const toggleFavorite = useCallback((id: string) => {
+    setStored((prev) => {
+      const set = new Set(prev.favorites);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      const next = { ...prev, favorites: Array.from(set) };
+      saveState(next);
+      return next;
+    });
+  }, []);
+
+  const pickRandom = useCallback(() => {
+    const pool = filteredPractice.length > 0 ? filteredPractice : practiceList;
+    const target = pool[Math.floor(Math.random() * pool.length)];
+    if (target) goToPuzzle(target.id);
+  }, [filteredPractice, practiceList, goToPuzzle]);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px] lg:gap-6">
@@ -313,12 +362,23 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
               {sideToMoveLabel} jogam — encontre o melhor lance.
             </p>
           </div>
-          <div className="flex flex-wrap gap-1.5 text-[10px]">
+          <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
             <span className="badge">Rating {currentPuzzle.rating}</span>
             {currentPuzzle.themes.slice(0, 3).map((t) => (
               <span key={t} className="badge">{themeLabel(t)}</span>
             ))}
             {solvedById && <span className="badge-success">✓ Resolvido</span>}
+            <button
+              onClick={() => toggleFavorite(currentId)}
+              className={`rounded-full border px-2 py-0.5 transition-colors ${
+                isFavoriteCurrent
+                  ? "border-yellow-400 bg-yellow-400/15 text-yellow-300"
+                  : "border-border text-muted hover:border-yellow-400/40 hover:text-yellow-300"
+              }`}
+              title={isFavoriteCurrent ? "Remover dos favoritos" : "Marcar como favorito"}
+            >
+              {isFavoriteCurrent ? "★" : "☆"} favorito
+            </button>
           </div>
         </div>
 
@@ -417,12 +477,60 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
         </div>
 
         <div className="card space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Banco de treino</h2>
-          <p className="text-[10px] text-muted">Ordenado por rating crescente.</p>
-          <ul className="scrollbar-thin max-h-[55vh] overflow-y-auto space-y-1 pr-1">
-            {practiceList.map((p) => {
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Banco</h2>
+            <button onClick={pickRandom} className="rounded border border-border bg-surfaceAlt px-2 py-0.5 text-[10px] text-muted hover:border-accent/40 hover:text-accent">
+              🎲 Aleatório
+            </button>
+          </div>
+
+          {/* Filtros */}
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-1">
+              {RATING_FILTERS.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => setRatingFilter(r.value)}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
+                    ratingFilter === r.value
+                      ? "border-accent bg-accent/20 text-accent"
+                      : "border-border text-muted hover:border-accent/40"
+                  }`}
+                >{r.label}</button>
+              ))}
+            </div>
+            <select
+              value={themeFilter}
+              onChange={(e) => setThemeFilter(e.target.value)}
+              className="input h-7 cursor-pointer text-[11px]"
+            >
+              <option value="">Todos os temas</option>
+              {allThemes.map((t) => (
+                <option key={t} value={t}>{themeLabel(t)}</option>
+              ))}
+            </select>
+            <div className="flex flex-wrap gap-2 text-[10px] text-muted">
+              <label className="flex cursor-pointer items-center gap-1">
+                <input type="checkbox" checked={hideSolved} onChange={(e) => setHideSolved(e.target.checked)} className="h-3 w-3 accent-accent" />
+                Ocultar resolvidos
+              </label>
+              <label className="flex cursor-pointer items-center gap-1">
+                <input type="checkbox" checked={onlyFavorites} onChange={(e) => setOnlyFavorites(e.target.checked)} className="h-3 w-3 accent-yellow-400" />
+                Só favoritos ★
+              </label>
+            </div>
+            <p className="text-[10px] text-muted">{filteredPractice.length} de {practiceList.length} puzzles</p>
+          </div>
+
+          <ul className="scrollbar-thin max-h-[45vh] overflow-y-auto space-y-1 pr-1">
+            {filteredPractice.length === 0 ? (
+              <li className="rounded border border-border bg-surfaceAlt/30 px-2 py-3 text-center text-[11px] text-muted">
+                Nenhum puzzle com esses filtros.
+              </li>
+            ) : filteredPractice.map((p) => {
               const isCurrent = p.id === currentId;
               const solved = stored.byPuzzle[p.id]?.solved;
+              const isFav = stored.favorites.includes(p.id);
               return (
                 <li key={p.id}>
                   <button
@@ -435,6 +543,7 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
                   >
                     <span className="flex items-center gap-1.5">
                       {solved ? <span className="text-success">✓</span> : <span className="opacity-30">○</span>}
+                      {isFav && <span className="text-yellow-400">★</span>}
                       <span className="font-mono">{p.id}</span>
                     </span>
                     <span className="flex items-center gap-1.5">
