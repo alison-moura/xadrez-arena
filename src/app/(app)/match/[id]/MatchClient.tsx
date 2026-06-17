@@ -1369,11 +1369,6 @@ export function MatchClient({
             customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
             customLightSquareStyle={{ backgroundColor: skin.boardLight }}
           />
-          {sendingMove && !isBotMatch && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/20">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-            </div>
-          )}
           {!isLiveView && (
             <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-purple-500/80 px-2 py-0.5 text-[10px] font-semibold text-white shadow">
               navegando — lance {pgnIndex} / {fullHistory.length}
