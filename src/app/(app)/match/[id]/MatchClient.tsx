@@ -44,6 +44,8 @@ type MatchData = {
   rematch_match_id: string | null;
   tournament_id: string | null;
   is_private?: boolean;
+  white_rating_delta?: number;
+  black_rating_delta?: number;
 };
 
 type EarnedAchievement = { id: string; name: string; icon: string; reward_coins: number };
@@ -1160,9 +1162,14 @@ export function MatchClient({
   const iWon       = match.winner?.id === viewerId;
   const iAmInvolved = isPlayer && match.status === "FINISHED";
   const endLabel   = resultLabel(match.result);
+  const myDelta = (() => {
+    if (!iAmInvolved) return null;
+    const d = myColor === "w" ? match.white_rating_delta : match.black_rating_delta;
+    return typeof d === "number" ? d : null;
+  })();
   const endSubtitle = (() => {
     if (!iAmInvolved) return null;
-    if (match.result?.includes("DRAW")) return "Apostas devolvidas. Rating ajustado.";
+    if (match.result?.includes("DRAW")) return "Apostas devolvidas.";
     if (iWon && match.payout > 0) return `Você ganhou ${formatCoins(match.payout)} coins.`;
     if (!iWon && match.wager > 0) return `Você perdeu ${formatCoins(match.wager)} coins.`;
     return null;
@@ -1194,6 +1201,13 @@ export function MatchClient({
               </h2>
               <p className="mt-1 text-sm text-muted">{endLabel}</p>
               {endSubtitle && <p className="mt-2 text-sm">{endSubtitle}</p>}
+              {iAmInvolved && myDelta !== null && myDelta !== 0 && (
+                <p className="mt-2 text-sm">
+                  Rating: <span className={`font-mono font-semibold ${myDelta > 0 ? "text-success" : "text-danger"}`}>
+                    {myDelta > 0 ? "+" : ""}{myDelta}
+                  </span>
+                </p>
+              )}
               {match.winner && !match.result?.includes("DRAW") && (
                 <p className="mt-1 text-xs text-muted">Vencedor: <span className="font-mono">@{match.winner.username}</span></p>
               )}
