@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { isMuted, setMuted, getPack, setPack, play as playSound, type SoundPack } from "@/lib/sounds";
+import { ANIM_SPEED_OPTIONS, type AnimSpeed } from "@/lib/board-prefs";
 
 type NotifPerm = "default" | "granted" | "denied" | "unsupported";
 
@@ -11,6 +12,8 @@ export function SettingsClient() {
   const [notif, setNotif] = useState<NotifPerm>("default");
   const [highlightLegal, setHighlightLegal] = useState(true);
   const [autoPromote, setAutoPromote] = useState(false);
+  const [showNotation, setShowNotation] = useState(true);
+  const [animSpeed, setAnimSpeed] = useState<AnimSpeed>("normal");
 
   useEffect(() => {
     setMutedState(isMuted());
@@ -23,6 +26,9 @@ export function SettingsClient() {
     try {
       setHighlightLegal(localStorage.getItem("xa.highlightLegal") !== "0");
       setAutoPromote(localStorage.getItem("xa.autoPromote") === "1");
+      setShowNotation(localStorage.getItem("xa.showNotation") !== "0");
+      const a = localStorage.getItem("xa.animSpeed") as AnimSpeed | null;
+      if (a) setAnimSpeed(a);
     } catch { /* ignore */ }
   }, []);
 
@@ -58,6 +64,17 @@ export function SettingsClient() {
     const v = !autoPromote;
     setAutoPromote(v);
     try { localStorage.setItem("xa.autoPromote", v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
+  function toggleNotation() {
+    const v = !showNotation;
+    setShowNotation(v);
+    try { localStorage.setItem("xa.showNotation", v ? "1" : "0"); } catch { /* ignore */ }
+  }
+
+  function pickAnimSpeed(v: AnimSpeed) {
+    setAnimSpeed(v);
+    try { localStorage.setItem("xa.animSpeed", v); } catch { /* ignore */ }
   }
 
   return (
@@ -145,6 +162,29 @@ export function SettingsClient() {
           checked={autoPromote}
           onChange={toggleAutoPromote}
         />
+        <ToggleRow
+          label="Coordenadas no tabuleiro"
+          desc="Exibe a-h e 1-8 nas bordas das casas."
+          checked={showNotation}
+          onChange={toggleNotation}
+        />
+        <div>
+          <div className="mb-1.5 text-sm font-medium">Velocidade da animação</div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {ANIM_SPEED_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => pickAnimSpeed(opt.value)}
+                className={`rounded-lg border py-1.5 text-[11px] transition-colors ${
+                  animSpeed === opt.value
+                    ? "border-accent bg-accent text-black font-medium"
+                    : "border-border text-muted hover:border-accent/40 hover:text-white"
+                }`}
+              >{opt.label}</button>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-muted">Afeta o deslizar das peças no tabuleiro.</p>
+        </div>
       </div>
 
       {/* Atalhos */}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Chess } from "chess.js";
 import { play as playSound } from "@/lib/sounds";
 import { PUZZLE_BANK, type PuzzleDef, themeLabel } from "@/lib/puzzles";
+import { getBoardPrefs, animDurationMs } from "@/lib/board-prefs";
 
 const Chessboard = dynamicLoad(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -91,6 +92,8 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
   const [themeFilter, setThemeFilter] = useState<string>("");
   const [hideSolved, setHideSolved] = useState(false);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [boardPrefs, setBoardPrefs] = useState(() => getBoardPrefs());
+  useEffect(() => { setBoardPrefs(getBoardPrefs()); }, []);
   const isDailyRef = useRef(currentId === puzzle.id);
 
   // Carrega estado salvo
@@ -393,7 +396,8 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.55)" }}
             customDarkSquareStyle={{ backgroundColor: "#3a3a55" }}
             customLightSquareStyle={{ backgroundColor: "#d8d8e5" }}
-            showBoardNotation
+            showBoardNotation={boardPrefs.showNotation}
+            animationDuration={animDurationMs(boardPrefs.animSpeed)}
           />
           {status === "wrong" && (
             <div className="pointer-events-none absolute inset-0 animate-pulse rounded-md ring-4 ring-danger/40" />

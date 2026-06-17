@@ -14,6 +14,7 @@ import { downloadPgn } from "@/lib/pgn-export";
 import { Confetti } from "@/components/Confetti";
 import { endgameCoachTip } from "@/lib/endgame-coach";
 import { MatchNoteCard } from "@/components/MatchNoteCard";
+import { getBoardPrefs, animDurationMs } from "@/lib/board-prefs";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -182,6 +183,14 @@ export function MatchClient({
 
   const [pgnIndex, setPgnIndex] = useState<number | null>(null);
   const [moveTimes, setMoveTimes] = useState<number[] | null>(null);
+  const [boardPrefs, setBoardPrefs] = useState(() => getBoardPrefs());
+
+  // Recarrega prefs quando a aba volta a ficar visível (caso usuário tenha mudado em /settings)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") setBoardPrefs(getBoardPrefs()); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const premoveRef = useRef<{ from: string; to: string }[]>([]);
@@ -701,16 +710,18 @@ export function MatchClient({
   function selectSquare(sq: string) {
     const piece = displayChess.get(sq as Parameters<typeof displayChess.get>[0]);
     if (!piece || piece.color !== myColor) return;
-    const moves = displayChess.moves({ square: sq as Parameters<typeof displayChess.moves>[0]["square"], verbose: true });
     const styles: Record<string, React.CSSProperties> = {
       [sq]: { backgroundColor: "rgba(245,179,1,0.55)" },
     };
-    (moves as Array<{ to: string }>).forEach((m) => {
-      const hasPiece = displayChess.get(m.to as Parameters<typeof displayChess.get>[0]);
-      styles[m.to] = hasPiece
-        ? { backgroundColor: "rgba(245,179,1,0.30)", borderRadius: "0" }
-        : { background: "radial-gradient(circle, rgba(245,179,1,0.45) 24%, transparent 25%)" };
-    });
+    if (boardPrefs.highlightLegal) {
+      const moves = displayChess.moves({ square: sq as Parameters<typeof displayChess.moves>[0]["square"], verbose: true });
+      (moves as Array<{ to: string }>).forEach((m) => {
+        const hasPiece = displayChess.get(m.to as Parameters<typeof displayChess.get>[0]);
+        styles[m.to] = hasPiece
+          ? { backgroundColor: "rgba(245,179,1,0.30)", borderRadius: "0" }
+          : { background: "radial-gradient(circle, rgba(245,179,1,0.45) 24%, transparent 25%)" };
+      });
+    }
     setSelectedSquare(sq);
     setLegalMoveStyles(styles);
   }
@@ -1482,8 +1493,8 @@ export function MatchClient({
             arePiecesDraggable={isLiveView && (isMyTurn || (!isMyTurn && isPlayer && match.status === "ACTIVE")) && !busy}
             customSquareStyles={customSquareStyles}
             customArrows={customArrows}
-            showBoardNotation={true}
-            animationDuration={200}
+            showBoardNotation={boardPrefs.showNotation}
+            animationDuration={animDurationMs(boardPrefs.animSpeed)}
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.65)" }}
             customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
             customLightSquareStyle={{ backgroundColor: skin.boardLight }}
