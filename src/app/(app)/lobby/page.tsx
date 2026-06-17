@@ -5,6 +5,7 @@ import { LobbyClient } from "./LobbyClient";
 import { formatCoins } from "@/lib/utils";
 import { DailyBonusBanner } from "@/components/DailyBonusBanner";
 import { PuzzleCard } from "@/components/PuzzleCard";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,7 @@ export default async function LobbyPage() {
 
   return (
     <div className="space-y-4">
+      <OnboardingModal />
       <DailyBonusBanner />
       {todayRecord && (
         <Link
