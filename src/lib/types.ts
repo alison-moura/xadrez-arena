@@ -53,6 +53,7 @@ export interface ChessUser {
   banned_at: string | null;
   ban_reason: string | null;
   is_bot: boolean;
+  is_admin: boolean;
   equipped_skin_id: string | null;
   created_at: string;
   updated_at: string;
@@ -131,10 +132,29 @@ export interface ChessMatch {
   white_accuracy: number | null;
   black_accuracy: number | null;
   analyzed_at: string | null;
+  time_control_seconds: number | null;
+  time_increment_seconds: number;
+  white_time_ms: number | null;
+  black_time_ms: number | null;
+  last_move_at: string | null;
+  draw_offered_by: string | null;
+  draw_offered_at: string | null;
+  rematch_offered_by: string | null;
+  rematch_match_id: string | null;
+  parent_match_id: string | null;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
   updated_at: string;
+}
+
+export interface ChessMatchMessage {
+  id: string;
+  match_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  user?: { id: string; username: string };
 }
 
 export interface ChessMatchWithPlayers extends ChessMatch {

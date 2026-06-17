@@ -14,15 +14,19 @@ const NAV = [
   { href: "/wallet", label: "Carteira" },
 ];
 
-export function NavLinks({ mobile = false }: { mobile?: boolean }) {
+export function NavLinks({ mobile = false, isAdmin = false }: { mobile?: boolean; isAdmin?: boolean }) {
   const pathname = usePathname();
   const base = mobile
     ? "rounded px-3 py-1 text-sm transition-colors"
     : "rounded px-3 py-1 text-sm transition-colors";
+  const items = isAdmin
+    ? [...NAV, { href: "/admin/withdrawals", label: "Admin · Saques" }]
+    : NAV;
   return (
     <>
-      {NAV.map((link) => {
+      {items.map((link) => {
         const active = pathname === link.href || pathname.startsWith(link.href + "/");
+        const isAdminLink = link.href.startsWith("/admin");
         return (
           <Link
             key={link.href}
@@ -31,7 +35,7 @@ export function NavLinks({ mobile = false }: { mobile?: boolean }) {
               active
                 ? "bg-surface font-medium text-white"
                 : "text-muted hover:bg-surface hover:text-white"
-            }`}
+            } ${isAdminLink ? "border border-accent/30 text-accent" : ""}`}
           >
             {link.label}
           </Link>

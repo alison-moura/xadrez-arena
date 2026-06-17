@@ -10,14 +10,22 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const { data: wallet } = await supabase
-    .from("chess_wallets")
-    .select("balance, locked")
-    .eq("user_id", session.user.id)
-    .maybeSingle();
+  const [{ data: wallet }, { data: me }] = await Promise.all([
+    supabase
+      .from("chess_wallets")
+      .select("balance, locked")
+      .eq("user_id", session.user.id)
+      .maybeSingle(),
+    supabase
+      .from("chess_users")
+      .select("is_admin")
+      .eq("id", session.user.id)
+      .maybeSingle(),
+  ]);
 
   const balance = wallet?.balance ?? 0;
   const locked = wallet?.locked ?? 0;
+  const isAdmin = !!me?.is_admin;
 
   return (
     <div className="min-h-screen">
@@ -29,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <span>Xadrez Arena</span>
             </Link>
             <nav className="hidden gap-1 md:flex">
-              <NavLinks />
+              <NavLinks isAdmin={isAdmin} />
             </nav>
           </div>
           <div className="flex items-center gap-3">
@@ -53,7 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto border-t border-border px-3 py-2 md:hidden">
-          <NavLinks mobile />
+          <NavLinks mobile isAdmin={isAdmin} />
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>

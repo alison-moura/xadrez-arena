@@ -191,9 +191,10 @@ O projeto está no Vercel. Push para `main` deploya automaticamente.
 
 | Hash | Descrição |
 |------|-----------|
+| `e542c7d` | feat: skin system, marketplace, drop system |
+| `43e2d63` | feat: ELO K-factor, Overwatch, ban system, Stockfish analysis |
+| `de8ab8a` | feat: premove, rating matchmaking, stake limits, achievements |
 | `b5de7fb` | feat: add chess bot (easy/medium/hard) |
-| `7b4f476` | docs: add live URL to README |
-| `7168316` | fix: disable Next.js fetch cache for supabase |
 | `9926be2` | feat: migrate from Prisma to Supabase |
 | `09fe962` | feat: initial xadrez arena platform |
 
@@ -240,16 +241,38 @@ Implementado 100% client-side em `MatchClient.tsx`:
 
 ## TODOs de produção
 
-- [ ] Relógio de xadrez (colunas `white_time_ms` / `black_time_ms` em `chess_matches`)
-- [ ] WebSocket real (Supabase Realtime) — substitui polling de 1.5s
-- [ ] Diálogo de promoção de peão (atualmente auto-promove pra rainha)
-- [ ] Painel admin para aprovar saques
-- [ ] Integração real com gateway de pagamento
-- [ ] Rate limiting nas APIs (Upstash Ratelimit)
-- [ ] Detecção de cheating (comparar com Stockfish)
-- [ ] Chat na partida
-- [ ] Navegação por lances no PGN (ver posição passada em modo read-only)
-- [ ] Compartilhar link da partida
+- [ ] Integração real com gateway de pagamento (atualmente sandbox)
+- [ ] Rate limiting distribuído (Upstash/Redis) — hoje é in-memory por processo
+- [ ] Detecção de cheating em background — já tem Stockfish analysis nos endpoints; falta job recorrente
+
+## Features implementadas (migration 0005)
+
+- **Relógio**: `time_control_seconds`, `time_increment_seconds`, `white_time_ms`, `black_time_ms`, `last_move_at` em `chess_matches`. RPC `chess_record_move` debita tempo + soma incremento. `chess_flag_time` reivindica perda por tempo. Auto-flag no client quando o tempo expira.
+- **Presets de tempo**: 1min, 3min, 5+3, 10min, 15+10, sem tempo (default: 5+3 blitz).
+- **Oferta de empate**: `chess_offer_draw`, `chess_accept_draw`, `chess_decline_draw`. Bandeira na sidebar do match.
+- **Rematch**: `chess_request_rematch` — cria nova partida com cores invertidas e mesma config (wager, rating range, time control). Auto-inicia quando ambos pedem.
+- **Promoção de peão**: modal com Q/R/B/N. Detectado pelo client antes de enviar o lance.
+- **Chat por partida**: tabela `chess_match_messages` + RPC `chess_post_message` (anti-flood: 5 msgs/10s, max 240 chars). Apenas jogadores podem postar.
+- **Navegação por lances**: botões ⏮ ◀ ▶ ⏭ na lista de PGN. Clique em lance pula pra posição. Modo "navegando" mostra overlay roxo.
+- **Compartilhar link**: botão na header copia URL absoluta da partida.
+- **Painel admin de saques**: `/admin/withdrawals`. Acessível só com `chess_users.is_admin = true`. RPCs `chess_approve_withdrawal`, `chess_reject_withdrawal` (devolve coins), `chess_mark_withdrawal_paid`.
+- **Rate limiting**: token bucket em memória (`src/lib/rate-limit.ts`) nos endpoints quentes (move, chat, draw, rematch, flag-time, create-match).
+- **Realtime opcional**: `src/lib/supabase-browser.ts` cria client com anon key (se `NEXT_PUBLIC_SUPABASE_ANON_KEY` estiver no env). `MatchClient` subscreve a `chess_matches`/`chess_moves`/`chess_match_messages` por canal. Polling de 1.5s segue como fallback. RLS habilitada (SELECT público) nas três tabelas.
+
+### Como dar admin a um usuário
+
+```sql
+UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
+```
+
+### Como habilitar Realtime
+
+1. Pegue a anon key em Supabase Dashboard → Settings → API.
+2. Adicione no `.env.local`:
+   ```
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+   ```
+3. A migration 0005 já habilita RLS + publication para realtime; nada mais é necessário no DB.
 
 ---
 

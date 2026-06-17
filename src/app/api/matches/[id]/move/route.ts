@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { supabase, rpcError } from "@/lib/supabase";
 import { applyMove } from "@/lib/chess-engine";
 import { playBotMove } from "@/lib/bot-runner";
+import { rateLimit, clientKey } from "@/lib/rate-limit";
 import type { ChessMatch } from "@/lib/types";
 
 const schema = z.object({
@@ -21,6 +22,13 @@ export async function POST(
     return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   }
 
+  const limit = rateLimit(clientKey(req, session.user.id, "move"), {
+    capacity: 6, refillPerSecond: 3,
+  });
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Lances muito rápidos. Espere." }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -29,9 +37,17 @@ export async function POST(
 
   const { data: match, error: matchErr } = await supabase
     .from("chess_matches")
-    .select("id, status, white_user_id, black_user_id, turn, fen, pgn, move_count, bot_difficulty, updated_at")
+    .select(
+      "id, status, white_user_id, black_user_id, turn, fen, pgn, move_count, bot_difficulty, updated_at, time_control_seconds, last_move_at, white_time_ms, black_time_ms"
+    )
     .eq("id", params.id)
-    .maybeSingle<Pick<ChessMatch, "id" | "status" | "white_user_id" | "black_user_id" | "turn" | "fen" | "pgn" | "move_count"> & { bot_difficulty: string | null; updated_at: string }>();
+    .maybeSingle<
+      Pick<
+        ChessMatch,
+        "id" | "status" | "white_user_id" | "black_user_id" | "turn" | "fen" | "pgn" | "move_count" |
+        "time_control_seconds" | "last_move_at" | "white_time_ms" | "black_time_ms"
+      > & { bot_difficulty: string | null; updated_at: string }
+    >();
 
   if (matchErr || !match) {
     return NextResponse.json({ error: "Partida não encontrada" }, { status: 404 });
@@ -51,7 +67,6 @@ export async function POST(
     return NextResponse.json({ error: "Não é sua vez" }, { status: 400 });
   }
 
-  // Compute move time since last match update
   const moveTimeMs = match.updated_at
     ? Math.max(0, Date.now() - new Date(match.updated_at).getTime())
     : null;
@@ -61,7 +76,7 @@ export async function POST(
     return NextResponse.json({ error: "Lance ilegal" }, { status: 400 });
   }
 
-  const { error: rpcErr } = await supabase.rpc("chess_record_move", {
+  const { data: rpcData, error: rpcErr } = await supabase.rpc("chess_record_move", {
     p_user_id:      session.user.id,
     p_match_id:     params.id,
     p_fen:          moveRes.fen,
@@ -78,8 +93,10 @@ export async function POST(
     return NextResponse.json({ error: rpcError(rpcErr) }, { status: 400 });
   }
 
-  // Trigger bot move if needed
-  if (match.bot_difficulty && !moveRes.isGameOver) {
+  // Se a RPC detectou estouro de tempo, o lance NÃO foi registrado.
+  const flagged = (rpcData as { flagged?: boolean } | null)?.flagged === true;
+
+  if (!flagged && match.bot_difficulty && !moveRes.isGameOver) {
     await playBotMove(params.id);
   }
 
@@ -94,5 +111,5 @@ export async function POST(
     .eq("id", params.id)
     .maybeSingle();
 
-  return NextResponse.json({ ok: true, match: updated });
+  return NextResponse.json({ ok: true, match: updated, flagged });
 }

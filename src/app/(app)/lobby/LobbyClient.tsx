@@ -8,12 +8,29 @@ type Match = {
   id: string;
   wager: number;
   status: string;
-  createdAt: string;
+  created_at: string;
   rating_min: number | null;
   rating_max: number | null;
-  whiteUser: { id: string; username: string; rating: number } | null;
-  blackUser: { id: string; username: string; rating: number } | null;
+  time_control_seconds: number | null;
+  time_increment_seconds: number;
+  white_user: { id: string; username: string; rating: number } | null;
+  black_user: { id: string; username: string; rating: number } | null;
 };
+
+type TimePreset = { label: string; sec: number | null; inc: number };
+const TIME_PRESETS: TimePreset[] = [
+  { label: "Sem tempo",   sec: null, inc: 0 },
+  { label: "1 min",       sec: 60,   inc: 0 },
+  { label: "3 min",       sec: 180,  inc: 0 },
+  { label: "5+3 blitz",   sec: 300,  inc: 3 },
+  { label: "10 min",      sec: 600,  inc: 0 },
+  { label: "15+10 rápido", sec: 900, inc: 10 },
+];
+
+function formatTC(sec: number | null, inc: number): string {
+  if (sec === null) return "∞";
+  return `${Math.round(sec / 60)}${inc > 0 ? `+${inc}` : ""}`;
+}
 
 function Avatar({ username }: { username: string }) {
   const initials = username.slice(0, 2).toUpperCase();
@@ -63,6 +80,7 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const [botDifficulty, setBotDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [botColor, setBotColor] = useState<"w" | "b" | "random">("w");
   const [creatingBot, setCreatingBot] = useState(false);
+  const [tcIdx, setTcIdx] = useState(3); // default 5+3 blitz
 
   async function load() {
     const [w, a] = await Promise.all([
@@ -83,10 +101,17 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
     e.preventDefault();
     setCreating(true);
     setError(null);
+    const tc = TIME_PRESETS[tcIdx];
     const res = await fetch("/api/matches", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ wager, preferredColor: color, ratingRange }),
+      body: JSON.stringify({
+        wager,
+        preferredColor: color,
+        ratingRange,
+        timeControlSeconds: tc.sec,
+        timeIncrementSeconds: tc.inc,
+      }),
     });
     const data = await res.json();
     setCreating(false);
@@ -142,8 +167,8 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
           ) : (
             <ul className="space-y-2">
               {waiting.map((m) => {
-                const host = m.whiteUser ?? m.blackUser;
-                const hostColorLabel = m.whiteUser ? "Brancas" : "Pretas";
+                const host = m.white_user ?? m.black_user;
+                const hostColorLabel = m.white_user ? "Brancas" : "Pretas";
                 const joinable = canJoin(m);
                 return (
                   <li key={m.id} className="card flex flex-wrap items-center justify-between gap-3 py-3">
@@ -159,7 +184,7 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
                         <div className="mt-0.5 text-xs text-muted">
                           Joga de {hostColorLabel} • pot{" "}
                           <span className="text-accent">{formatCoins(m.wager * 2)}</span> •{" "}
-                          {formatDate(m.createdAt)}
+                          {formatDate(m.created_at)} • <span className="text-muted">{formatTC(m.time_control_seconds, m.time_increment_seconds)}</span>
                         </div>
                       </div>
                     </div>
@@ -199,14 +224,14 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
                 <li key={m.id} className="card flex items-center justify-between py-3">
                   <div className="flex items-center gap-3">
                     <div className="flex -space-x-2">
-                      {m.whiteUser && <Avatar username={m.whiteUser.username} />}
-                      {m.blackUser && <Avatar username={m.blackUser.username} />}
+                      {m.white_user && <Avatar username={m.white_user.username} />}
+                      {m.black_user && <Avatar username={m.black_user.username} />}
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 text-sm">
-                        <span className="font-semibold">@{m.whiteUser?.username ?? "—"}</span>
+                        <span className="font-semibold">@{m.white_user?.username ?? "—"}</span>
                         <span className="text-muted">vs</span>
-                        <span className="font-semibold">@{m.blackUser?.username ?? "Bot"}</span>
+                        <span className="font-semibold">@{m.black_user?.username ?? "Bot"}</span>
                       </div>
                       <div className="text-xs text-muted">
                         pot <span className="text-accent">{formatCoins(m.wager * 2)}</span>
@@ -255,6 +280,26 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
                     }`}
                   >
                     {v === 0 ? "Amistoso" : formatCoins(v)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Tempo</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {TIME_PRESETS.map((p, i) => (
+                  <button
+                    type="button"
+                    key={p.label}
+                    onClick={() => setTcIdx(i)}
+                    className={`rounded-lg border py-2 text-xs transition-colors ${
+                      tcIdx === i
+                        ? "border-accent bg-accent text-black font-medium"
+                        : "border-border text-muted hover:border-accent/40 hover:text-white"
+                    }`}
+                  >
+                    {p.label}
                   </button>
                 ))}
               </div>
