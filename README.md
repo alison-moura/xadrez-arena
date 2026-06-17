@@ -71,11 +71,12 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Confetti de peças quando você ganha
 
 ### Puzzle do Dia 🧩
-- 15 puzzles táticos curados em `src/lib/puzzles.ts` (FEN + sequência UCI)
+- **32 puzzles** táticos curados em `src/lib/puzzles.ts` (FEN + sequência UCI)
 - Puzzle determinístico por dia (todos veem o mesmo)
 - Dicas adaptativas (revela mais conforme erros/dicas anteriores)
 - Streak persistente em `localStorage` (sem DB)
-- Banco de treino navegável por rating crescente
+- **Filtros** por rating (Fácil/Médio/Difícil), por tema (15+ opções), ocultar resolvidos, só favoritos
+- **Favoritos ★** (localStorage) + botão **🎲 Aleatório** respeitando filtros
 - Banner no lobby + card de stats no perfil próprio (`/u/[username]`)
 
 ### Lobby — filtros e busca
@@ -90,12 +91,20 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Partidas privadas (não aparecem no lobby — desafie amigo por link)
 
 ### Tempo, empate, rematch, chat
-- Relógio com presets (1min, 3min, 5+3, 10min, 15+10, sem tempo)
+- Relógio com **9 presets** (30s, 1min, 2+1, 3min, 5+3, 10min, 15+10, 30+0, sem tempo)
 - Auto-flag por tempo no client
 - Oferta/aceitar/recusar empate · reivindicar empate (insufficient material, threefold, 50 lances)
 - Rematch com cores invertidas
 - Chat por partida com anti-flood + reactions rápidas
 - Notificações de navegador (configurável)
+
+### Configurações do tabuleiro
+- Toggles persistentes em localStorage via `src/lib/board-prefs.ts`
+- Destacar lances legais (on/off)
+- Auto-promover pra rainha
+- Coordenadas a-h/1-8 (on/off)
+- **Velocidade da animação** das peças (Sem / Rápida / Normal / Lenta)
+- Pack de sons (Clássico / Futurista / Suave)
 
 ### Histórico, análise e watch
 - Histórico filtrável (vitória/derrota/empate, contra bot, etc.) com paginação
@@ -103,6 +112,7 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Página `/watch` pra assistir partidas ativas, `/overwatch` pra revisar suspeitas
 - **Tempo por lance** exibido na lista após o fim (`/api/matches/[id]/moves` → `PgnList`)
 - **Sparkline de rating** no perfil público (`/u/[username]`) — últimas 30 partidas
+- **Anotação privada** por partida (textarea com auto-save em localStorage, apenas para jogadores em partidas finalizadas)
 
 ### Torneios + Marketplace
 - Torneios estilo arena com leaderboard e prize pool

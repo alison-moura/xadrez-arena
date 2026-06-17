@@ -353,3 +353,23 @@ UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
 
 - Componente `src/components/Sparkline.tsx` (SVG puro, SSR).
 - Perfil público (`/u/[username]`) calcula trajetória de rating retroagindo deltas: parte do rating atual e subtrai `white_rating_delta`/`black_rating_delta` partida-a-partida (ordem decrescente), inverte pra ordem cronológica.
+
+## Board prefs (preferências de tabuleiro)
+
+- `src/lib/board-prefs.ts` — chaves `xa.highlightLegal`, `xa.autoPromote`, `xa.showNotation`, `xa.animSpeed` no localStorage.
+- `getBoardPrefs()` carrega tudo em uma estrutura; `animDurationMs(speed)` mapeia pra duração da animação do `react-chessboard`.
+- Wire em `MatchClient`, `PuzzleClient`, `SettingsClient`.
+- `MatchClient` recarrega prefs no `visibilitychange` (usuário pode ter mudado em `/settings` em outra aba).
+
+## Anotação privada por partida
+
+- `src/components/MatchNoteCard.tsx` — textarea com debounce de 500ms.
+- Persistência em `localStorage` com chave `xa.matchNote.<matchId>`, valor `{ text, savedAt }`.
+- Renderizado apenas em partidas FINISHED para jogadores.
+
+## Banco de puzzles (32)
+
+- IDs `p001`–`p032`. Todos validados via chess.js antes do commit.
+- Cobertura: aberturas táticas, mates 1–3, endgames, sacrifícios (Greek gift), forks, pins, skewers, escadinha de torres, double attack.
+- Filtros disponíveis: rating (Fácil ≤800 / Médio 801-1300 / Difícil 1301+), tema, ocultar resolvidos, só favoritos.
+- Favoritos armazenados em `xa.puzzle.v1.favorites: string[]`.
