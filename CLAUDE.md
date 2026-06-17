@@ -2,6 +2,25 @@
 
 Guia de desenvolvimento para o agente Claude. Contexto completo do projeto para continuação de sessões.
 
+---
+
+## Modo de trabalho autônomo (IMPORTANTE)
+
+Quando o usuário pedir "continue melhorando", "incremente até esgotar créditos" ou variação:
+
+1. **Trabalhe em loop contínuo** — termine uma feature, escolha a próxima sozinho, e siga sem perguntar. Só pare se: (a) o usuário interromper, (b) ele explicitar uma tarefa específica diferente, ou (c) build/TS quebrar repetidamente.
+2. **Cace funcionalidades** — olhe o estado atual, identifique lacunas (UX, polish, features faltando vs concorrentes lichess/chess.com), proponha e implemente. Mantenha TaskCreate/TaskUpdate atualizado.
+3. **Commit a cada passo concluído** — assim que uma feature builda limpa (TypeScript sem erros, `npm run build` OK), faça commit imediatamente. Isso garante que se a conexão cair, nenhum raciocínio é perdido. **Push para `main` também** — branch principal é `main` e merge direto é OK pra este projeto.
+4. **Atualize `README.md`** a cada commit relevante (feature visível ao usuário) — entradas novas em "Recursos", remova TODOs concluídos.
+5. **Atualize `CLAUDE.md`** sempre que adicionar:
+   - Nova migration de DB (descrever colunas/RPCs)
+   - Novo padrão de arquitetura
+   - Comportamento não-óbvio que sessão futura precisa saber
+   - Mas NÃO precisa atualizar pra polish/bugfix triviais.
+6. **Ordem ideal por iteração**: implementar → `npm run build` → commit → push → README+CLAUDE se necessário → próxima feature.
+7. **Granularidade de commit**: um commit por feature/melhoria autocontida. Mensagens curtas no padrão `feat:`/`fix:`/`docs:`/`refactor:` (estilo já existente no repo).
+8. **Não pule hooks ou `--no-verify`** — se um pre-commit hook quebrar, corrija a raiz.
+
 ## Visão geral
 
 Plataforma de xadrez multiplayer com apostas em coins. Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase + NextAuth + chess.js + react-chessboard**.
@@ -302,3 +321,35 @@ UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
 **chess.js + react-chessboard**: A validação acontece em dois lugares: client (chess.js no browser para feedback imediato) e server (chess.js na API route + RPC para registro definitivo).
 
 **Bot sem user_id**: Partidas vs bot têm `black_user_id = null` (ou `white_user_id = null`). Detectar: `match.white_user === null || match.black_user === null` quando status ≠ WAITING.
+
+---
+
+## Puzzle do Dia (tactics training)
+
+- **Banco curado**: `src/lib/puzzles.ts` com ~15 puzzles (FEN inicial + lista de UCI). O primeiro lance da lista é executado pelo "oponente" automaticamente; o resto é o que o jogador deve responder.
+- **Puzzle do dia determinístico**: `puzzleOfDay()` indexa o array a partir de um epoch UTC, então todos os usuários veem o mesmo puzzle no mesmo dia.
+- **Página**: `/puzzle` (`src/app/(app)/puzzle/PuzzleClient.tsx`). Tabuleiro live, dicas adaptativas (revela mais info conforme erros), botões reiniciar/ver solução, navegação pra próximo puzzle do banco.
+- **Estado local**: `localStorage["xa.puzzle.v1"]` guarda streak, totais e por-puzzle (resolvido, tempo, erros, dicas). Não há tabela DB — nenhuma migração necessária.
+- **Banner no lobby**: `src/components/PuzzleCard.tsx` linka direto pro puzzle e mostra streak. Componente `PuzzleStatsCard` aparece no perfil próprio do usuário (`/u/[username]`).
+
+## Endgame coach (dica pós-partida)
+
+- `src/lib/endgame-coach.ts` — detecta padrões de final pela contagem de material da FEN final + result. Retorna `{ emoji, title, body }`.
+- Wire: modal de fim de jogo em `MatchClient.tsx` mostra dica curta sobre KQ vs K, KR vs K, escadinha, material insuficiente, regra dos 50 lances, etc.
+
+## Lobby (filtros adicionais)
+
+- **Filtro de aposta**: chips por faixa (Amistoso, ≤100, 100–500, 500+) — `WAGER_FILTERS`.
+- **Sort**: select com Mais recentes / Maior aposta / Maior rating / Menor rating.
+- **Busca por @usuário**: input de busca filtra por username (case-insensitive).
+- **Toggle "Só joináveis"**: oculta partidas fora da faixa de rating do viewer.
+
+## Tempo por lance (timestamps)
+
+- `GET /api/matches/[id]/moves` retorna lista de moves com `move_time_ms`.
+- `MatchClient` busca esses dados quando partida termina (`status === FINISHED`) e passa pro `PgnList`, que exibe tempo formatado ao lado de cada lance.
+
+## Sparkline de rating
+
+- Componente `src/components/Sparkline.tsx` (SVG puro, SSR).
+- Perfil público (`/u/[username]`) calcula trajetória de rating retroagindo deltas: parte do rating atual e subtrai `white_rating_delta`/`black_rating_delta` partida-a-partida (ordem decrescente), inverte pra ordem cronológica.

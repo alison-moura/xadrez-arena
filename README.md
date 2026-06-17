@@ -64,6 +64,55 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Avatares gerados por iniciais com cor baseada no username
 - Cards de partida com rating ELO e wager colorido por valor
 - Landing page com seção de features e CTA
+- **Saldo compacto no header mobile** + nav scrollável com fade indicator
+- **PWA** com manifest + meta tags
+- Picker de promoção sobre a casa (não modal central)
+- Modal de fim de jogo com emoji contextual, payout, rating delta e **dica do coach** (final tipo KQ vs K, escadinha, regra 50 lances etc.)
+- Confetti de peças quando você ganha
+
+### Puzzle do Dia 🧩
+- 15 puzzles táticos curados em `src/lib/puzzles.ts` (FEN + sequência UCI)
+- Puzzle determinístico por dia (todos veem o mesmo)
+- Dicas adaptativas (revela mais conforme erros/dicas anteriores)
+- Streak persistente em `localStorage` (sem DB)
+- Banco de treino navegável por rating crescente
+- Banner no lobby + card de stats no perfil próprio (`/u/[username]`)
+
+### Lobby — filtros e busca
+- Categorias por tempo (Bullet/Blitz/Rápido/Clássico/Sem tempo)
+- **Filtro de aposta** (Amistoso, ≤100, 100–500, 500+)
+- **Sort** (Mais recentes / Maior aposta / Maior rating / Menor rating)
+- **Busca por @usuário** (case-insensitive)
+- Toggle "Só joináveis" (oculta partidas fora da faixa de rating do viewer)
+
+### Partidas privadas + Quick Match
+- Quick Match: cria ou entra em partida com sua aposta e tempo automaticamente
+- Partidas privadas (não aparecem no lobby — desafie amigo por link)
+
+### Tempo, empate, rematch, chat
+- Relógio com presets (1min, 3min, 5+3, 10min, 15+10, sem tempo)
+- Auto-flag por tempo no client
+- Oferta/aceitar/recusar empate · reivindicar empate (insufficient material, threefold, 50 lances)
+- Rematch com cores invertidas
+- Chat por partida com anti-flood + reactions rápidas
+- Notificações de navegador (configurável)
+
+### Histórico, análise e watch
+- Histórico filtrável (vitória/derrota/empate, contra bot, etc.) com paginação
+- **Review** com Stockfish (server-side + WASM fallback no browser) — CPL/accuracy por jogador + qualidade por lance
+- Página `/watch` pra assistir partidas ativas, `/overwatch` pra revisar suspeitas
+- **Tempo por lance** exibido na lista após o fim (`/api/matches/[id]/moves` → `PgnList`)
+- **Sparkline de rating** no perfil público (`/u/[username]`) — últimas 30 partidas
+
+### Torneios + Marketplace
+- Torneios estilo arena com leaderboard e prize pool
+- Sistema de skins (board colors) com 6+ presets, marketplace P2P, drop por partida
+- Inventory + shop com filtros por raridade
+
+### Social
+- Sistema de seguir (`/following`) + status online
+- Perfil público com stats, conquistas, trajetória, últimas partidas
+- Bônus diário com streak
 
 ## Setup
 
@@ -161,16 +210,11 @@ Cancelamento (`chess_cancel_match`) só é permitido em `WAITING` pelo criador, 
 
 ## Considerações de produção (TODOs)
 
-- Relógio de xadrez (timer por jogador) — adicionar colunas `chess_matches.white_time_ms` / `black_time_ms`
-- WebSocket real (Supabase Realtime) — substitui o polling de 1.5s; basta `supabase.channel(...).on('postgres_changes', ...)`
-- Diálogo de promoção de peão (atualmente auto-promove para rainha)
-- Painel admin para aprovar saques (`chess_withdrawal_requests.status`)
 - Integração real com gateway de pagamento (Stripe Connect, PIX via Mercado Pago, etc)
 - KYC/AML conforme legislação do seu país para apostas com dinheiro real
-- Rate limiting nas APIs (ex: Upstash Ratelimit)
-- Detecção de cheating (lances do Stockfish)
-- Sistema de chat na partida (Supabase Realtime + tabela `chess_messages`)
-- Navegação por lances no PGN (ver posições passadas em modo read-only)
+- Rate limiting distribuído (Upstash Redis) — hoje é in-memory por processo
+- Detecção de cheating em background (job recorrente analisando partidas via Stockfish)
+- Persistir streak/totals de puzzle no DB (hoje só localStorage)
 
 ## Licença
 
