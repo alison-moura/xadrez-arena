@@ -1,18 +1,20 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { isMuted, setMuted, play as playSound } from "@/lib/sounds";
+import { isMuted, setMuted, getPack, setPack, play as playSound, type SoundPack } from "@/lib/sounds";
 
 type NotifPerm = "default" | "granted" | "denied" | "unsupported";
 
 export function SettingsClient() {
   const [muted, setMutedState] = useState(false);
+  const [pack, setPackState] = useState<SoundPack>("classic");
   const [notif, setNotif] = useState<NotifPerm>("default");
   const [highlightLegal, setHighlightLegal] = useState(true);
   const [autoPromote, setAutoPromote] = useState(false);
 
   useEffect(() => {
     setMutedState(isMuted());
+    setPackState(getPack());
     if (typeof window === "undefined" || !("Notification" in window)) {
       setNotif("unsupported");
     } else {
@@ -23,6 +25,12 @@ export function SettingsClient() {
       setAutoPromote(localStorage.getItem("xa.autoPromote") === "1");
     } catch { /* ignore */ }
   }, []);
+
+  function pickPack(p: SoundPack) {
+    setPack(p);
+    setPackState(p);
+    if (!muted) playSound("notify");
+  }
 
   function toggleMute() {
     const v = !muted;
@@ -71,6 +79,30 @@ export function SettingsClient() {
           checked={!muted}
           onChange={toggleMute}
         />
+        {!muted && (
+          <div>
+            <div className="mb-2 text-xs text-muted">Pack de sons</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                { v: "classic" as const, label: "Clássico", emoji: "🎵" },
+                { v: "futuristic" as const, label: "Futurista", emoji: "🛸" },
+                { v: "soft" as const, label: "Suave", emoji: "🌿" },
+              ]).map((p) => (
+                <button
+                  key={p.v}
+                  onClick={() => pickPack(p.v)}
+                  className={`rounded-lg border py-2 text-xs transition-colors ${
+                    pack === p.v
+                      ? "border-accent bg-accent text-black font-medium"
+                      : "border-border text-muted hover:border-accent/40 hover:text-white"
+                  }`}
+                >
+                  {p.emoji} {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Notificações */}

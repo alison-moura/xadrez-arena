@@ -16,8 +16,26 @@ export type SoundKind =
   | "notify"      // chat / oferta de empate
   | "click";      // UI feedback
 
+export type SoundPack = "classic" | "futuristic" | "soft";
+
 let ctx: AudioContext | null = null;
 let muted: boolean | null = null;
+let pack: SoundPack | null = null;
+
+export function getPack(): SoundPack {
+  if (typeof window === "undefined") return "classic";
+  if (pack !== null) return pack;
+  try {
+    const v = localStorage.getItem("xa.soundPack");
+    pack = (v === "futuristic" || v === "soft") ? v : "classic";
+  } catch { pack = "classic"; }
+  return pack;
+}
+
+export function setPack(p: SoundPack) {
+  pack = p;
+  try { localStorage.setItem("xa.soundPack", p); } catch { /* ignore */ }
+}
 
 function getCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -106,28 +124,30 @@ function noise(opts: { duration: number; gain?: number; lpHz?: number }) {
 
 export function play(kind: SoundKind) {
   if (isMuted()) return;
+  const p = getPack();
+  if (p === "futuristic") return playFuturistic(kind);
+  if (p === "soft")       return playSoft(kind);
+  return playClassic(kind);
+}
+
+function playClassic(kind: SoundKind) {
   switch (kind) {
     case "move":
-      // thump curto, baixo
       blip({ freq: 260, freqEnd: 160, duration: 0.07, type: "triangle", gain: 0.18 });
       break;
     case "capture":
-      // estalo: noise + tom curto
       noise({ duration: 0.08, gain: 0.20, lpHz: 2200 });
       blip({ freq: 180, freqEnd: 90, duration: 0.10, type: "sawtooth", gain: 0.14 });
       break;
     case "check":
-      // duplo tom ascendente, atenção
       blip({ freq: 660,  duration: 0.09, type: "sine", gain: 0.20 });
       setTimeout(() => blip({ freq: 990, duration: 0.10, type: "sine", gain: 0.22 }), 70);
       break;
     case "castle":
-      // dois thumps separados
       blip({ freq: 240, freqEnd: 160, duration: 0.07, type: "triangle", gain: 0.18 });
       setTimeout(() => blip({ freq: 240, freqEnd: 160, duration: 0.07, type: "triangle", gain: 0.18 }), 80);
       break;
     case "promote":
-      // arpejo ascendente
       [440, 554, 659, 880].forEach((f, i) =>
         setTimeout(() => blip({ freq: f, duration: 0.08, type: "sine", gain: 0.18 }), i * 55)
       );
@@ -156,6 +176,102 @@ export function play(kind: SoundKind) {
       break;
     case "click":
       blip({ freq: 520, duration: 0.03, type: "square", gain: 0.10 });
+      break;
+  }
+}
+
+function playFuturistic(kind: SoundKind) {
+  switch (kind) {
+    case "move":
+      blip({ freq: 880, freqEnd: 660, duration: 0.05, type: "sine", gain: 0.12 });
+      break;
+    case "capture":
+      blip({ freq: 1320, freqEnd: 220, duration: 0.12, type: "sawtooth", gain: 0.14 });
+      noise({ duration: 0.05, gain: 0.10, lpHz: 4000 });
+      break;
+    case "check":
+      blip({ freq: 1320, duration: 0.05, type: "square", gain: 0.18 });
+      setTimeout(() => blip({ freq: 1760, duration: 0.06, type: "square", gain: 0.20 }), 40);
+      setTimeout(() => blip({ freq: 2200, duration: 0.08, type: "square", gain: 0.20 }), 80);
+      break;
+    case "castle":
+      blip({ freq: 660, freqEnd: 990, duration: 0.10, type: "sine", gain: 0.15 });
+      break;
+    case "promote":
+      [660, 990, 1320, 1760].forEach((f, i) =>
+        setTimeout(() => blip({ freq: f, duration: 0.06, type: "sine", gain: 0.16 }), i * 40)
+      );
+      break;
+    case "start":
+      blip({ freq: 440, freqEnd: 880, duration: 0.20, type: "sine", gain: 0.18 });
+      break;
+    case "winSelf":
+      [880, 1100, 1320, 1760].forEach((f, i) =>
+        setTimeout(() => blip({ freq: f, duration: 0.15, type: "sine", gain: 0.20 }), i * 80)
+      );
+      break;
+    case "loseSelf":
+      blip({ freq: 220, freqEnd: 55, duration: 0.6, type: "square", gain: 0.16 });
+      break;
+    case "draw":
+      blip({ freq: 660, duration: 0.10, type: "sine", gain: 0.16 });
+      setTimeout(() => blip({ freq: 660, duration: 0.16, type: "sine", gain: 0.15 }), 120);
+      break;
+    case "lowTime":
+      blip({ freq: 1760, duration: 0.04, type: "sawtooth", gain: 0.18 });
+      break;
+    case "notify":
+      blip({ freq: 1100, duration: 0.06, type: "sine", gain: 0.16 });
+      setTimeout(() => blip({ freq: 1320, duration: 0.08, type: "sine", gain: 0.18 }), 50);
+      break;
+    case "click":
+      blip({ freq: 1320, duration: 0.02, type: "square", gain: 0.08 });
+      break;
+  }
+}
+
+function playSoft(kind: SoundKind) {
+  switch (kind) {
+    case "move":
+      blip({ freq: 220, freqEnd: 180, duration: 0.10, type: "sine", gain: 0.12 });
+      break;
+    case "capture":
+      blip({ freq: 160, freqEnd: 100, duration: 0.16, type: "sine", gain: 0.16 });
+      break;
+    case "check":
+      blip({ freq: 520, duration: 0.18, type: "sine", gain: 0.14 });
+      break;
+    case "castle":
+      blip({ freq: 240, freqEnd: 200, duration: 0.10, type: "sine", gain: 0.14 });
+      setTimeout(() => blip({ freq: 240, freqEnd: 200, duration: 0.10, type: "sine", gain: 0.12 }), 100);
+      break;
+    case "promote":
+      [440, 554, 659].forEach((f, i) =>
+        setTimeout(() => blip({ freq: f, duration: 0.12, type: "sine", gain: 0.14 }), i * 80)
+      );
+      break;
+    case "start":
+      blip({ freq: 440, duration: 0.18, type: "sine", gain: 0.14 });
+      break;
+    case "winSelf":
+      [523, 659, 784].forEach((f, i) =>
+        setTimeout(() => blip({ freq: f, duration: 0.20, type: "sine", gain: 0.16 }), i * 130)
+      );
+      break;
+    case "loseSelf":
+      blip({ freq: 330, freqEnd: 165, duration: 0.45, type: "sine", gain: 0.14 });
+      break;
+    case "draw":
+      blip({ freq: 440, duration: 0.18, type: "sine", gain: 0.14 });
+      break;
+    case "lowTime":
+      blip({ freq: 720, duration: 0.10, type: "sine", gain: 0.12 });
+      break;
+    case "notify":
+      blip({ freq: 660, duration: 0.14, type: "sine", gain: 0.12 });
+      break;
+    case "click":
+      blip({ freq: 440, duration: 0.04, type: "sine", gain: 0.08 });
       break;
   }
 }
