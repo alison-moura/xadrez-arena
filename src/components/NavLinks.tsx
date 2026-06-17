@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/lobby", label: "Lobby" },
+  { href: "/puzzle", label: "Puzzle" },
   { href: "/watch", label: "Assistir" },
   { href: "/tournaments", label: "Torneios" },
   { href: "/following", label: "Seguindo" },
