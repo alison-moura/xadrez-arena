@@ -150,7 +150,7 @@ export function MatchClient({
   const [legalMoveStyles, setLegalMoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [premoveStyles, setPremoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [annotationStyles, setAnnotationStyles] = useState<Record<string, React.CSSProperties>>({});
-  const [copied, setCopied] = useState<"fen" | "pgn" | "url" | null>(null);
+  const [copied, setCopied] = useState<"fen" | "pgn" | "url" | "share" | null>(null);
   const [achievements, setAchievements] = useState<EarnedAchievement[]>([]);
   const [skinDrop, setSkinDrop] = useState<SkinDrop | null>(null);
   const [equippedSkinId, setEquippedSkinId] = useState("classic");
@@ -1036,12 +1036,30 @@ export function MatchClient({
     setReportOpen(false);
   }
 
-  async function copyText(text: string, type: "fen" | "pgn" | "url") {
+  async function copyText(text: string, type: "fen" | "pgn" | "url" | "share") {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
     } catch { /* ignore */ }
+  }
+
+  function shareResult() {
+    if (match.status !== "FINISHED") return;
+    const w = match.white_user?.username ?? (isBotMatch ? "Bot" : "?");
+    const b = match.black_user?.username ?? (isBotMatch ? "Bot" : "?");
+    const wr = match.white_user?.rating ? ` (${match.white_user.rating})` : "";
+    const br = match.black_user?.rating ? ` (${match.black_user.rating})` : "";
+    const outcome = match.result?.includes("DRAW") ? "🤝 Empate"
+      : match.winner ? `🏆 ${match.winner.username} venceu`
+      : "Encerrada";
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const text =
+`♟ Xadrez Arena
+${w}${wr} ${match.result === "DRAW" || match.result?.includes("DRAW") ? "½–½" : match.winner?.id === match.white_user_id ? "1–0" : "0–1"} ${b}${br}
+${outcome} em ${match.move_count} lances
+${url}`;
+    void copyText(text, "share");
   }
 
   // Chat
@@ -1304,8 +1322,13 @@ export function MatchClient({
                 </Link>
               )}
 
+              {/* Compartilhar resultado */}
+              <button onClick={shareResult} className={`btn-secondary ${isPlayer && !isBotMatch ? "" : "col-span-2"}`}>
+                {copied === "share" ? "✓ Copiado" : "📋 Compartilhar"}
+              </button>
+
               {/* Fechar */}
-              <button onClick={() => setEndVisible(false)} className={`btn-secondary ${isPlayer && !isBotMatch ? "" : "col-span-2"}`}>
+              <button onClick={() => setEndVisible(false)} className="btn-secondary col-span-2">
                 Fechar
               </button>
             </div>
