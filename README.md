@@ -114,6 +114,10 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - **Sparkline de rating** no perfil público (`/u/[username]`) — últimas 30 partidas
 - **Anotação privada** por partida (textarea com auto-save em localStorage, apenas para jogadores em partidas finalizadas)
 - **Dashboard pessoal** `/stats` — big numbers, breakdown por categoria de tempo com W/D/L empilhado, trajetória, atividade dos últimos 14 dias
+- **Record de hoje** no topo do lobby — V/E/D e delta de rating do dia
+- **Resumo agregado** em `/history` — total, win rate, contagem W/E/D, saldo
+- **Onboarding** de 3 passos no primeiro acesso (modal dismissable, flag em localStorage)
+- **Backup/Restore** das preferências em `/settings` (exporta/importa JSON com todas as chaves `xa.*`)
 
 ### Torneios + Marketplace
 - Torneios estilo arena com leaderboard e prize pool

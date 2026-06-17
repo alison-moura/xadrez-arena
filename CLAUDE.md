@@ -385,6 +385,21 @@ Em `/u/[username]`:
 - Mostra: big numbers, breakdown empilhado, sparkline (60 partidas), bar chart de atividade (14 dias), painel vs bot.
 - Não duplica dados do `/u/[username]` — esse foca em perfil público, `/stats` foca em métricas pessoais detalhadas.
 
+## Onboarding + Backup local
+
+- `src/components/OnboardingModal.tsx` — 3 passos, flag `xa.onboarded.v1`. Renderizado em `/lobby/page.tsx`.
+- Settings `BackupRestoreCard` exporta/importa todas as chaves `xa.*` como JSON. Recarrega a página após import bem-sucedido.
+
+## Lobby: record de hoje
+
+- Query SSR em `/lobby/page.tsx` filtra `chess_matches` finalizadas desde 00:00 UTC do dia (`gte("finished_at", startOfDayUTC)`).
+- Card no topo linka pra `/stats`. Cores semânticas (V verde, D vermelho, delta colorido).
+
+## History: resumo agregado
+
+- `HistoryClient.tsx` computa `summary { netCoins, winRate, total }` via `useMemo` sobre `classified[]`.
+- Renderiza 4 SummaryBox no topo (antes dos filtros).
+
 ## Achievements: progresso por categoria
 
 `/achievements` mostra um mini-card por categoria com barra de progresso colorida (verde se 100%, dourado caso contrário), antes da grade principal.
