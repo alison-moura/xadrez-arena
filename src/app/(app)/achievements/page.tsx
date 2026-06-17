@@ -54,6 +54,12 @@ export default function AchievementsPage() {
   const earned = achievements.filter((a) => a.earned).length;
   const total = achievements.length;
 
+  const catStats = categories.map((cat) => {
+    const inCat = achievements.filter((a) => a.category === cat);
+    const earnedInCat = inCat.filter((a) => a.earned).length;
+    return { cat, earned: earnedInCat, total: inCat.length, pct: inCat.length ? Math.round((earnedInCat / inCat.length) * 100) : 0 };
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-muted">
@@ -87,6 +93,29 @@ export default function AchievementsPage() {
           style={{ width: `${total > 0 ? (earned / total) * 100 : 0}%` }}
         />
       </div>
+
+      {/* Per-category mini progress */}
+      {catStats.length > 0 && (
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {catStats.map((s) => (
+            <div key={s.cat} className="card py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">
+                  {CATEGORY_ICONS[s.cat]} {CATEGORY_LABELS[s.cat] ?? s.cat}
+                </span>
+                <span className="text-[10px] text-muted">{s.earned}/{s.total}</span>
+              </div>
+              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surfaceAlt">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${s.pct === 100 ? "bg-success" : "bg-accent"}`}
+                  style={{ width: `${s.pct}%` }}
+                />
+              </div>
+              <div className="mt-0.5 text-right text-[10px] text-muted">{s.pct}%</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Category filter */}
       <div className="flex flex-wrap gap-2">
