@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { formatCoins } from "@/lib/utils";
 import { SKIN_DEFS, RARITY_COLORS, RARITY_LABELS, type SkinRarity } from "@/lib/skins";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { play as playSound, isMuted, setMuted } from "@/lib/sounds";
+import { detectOpening } from "@/lib/openings";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -55,6 +57,9 @@ const PIECE_VALUES: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
 const PIECE_ORDER = ["q", "r", "b", "n", "p"];
 const CAPTURED_SYMBOLS: Record<string, string> = { q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" };
 
+// Cores cíclicas para anotação (right-click) — estilo Lichess
+const ANNOTATION_COLORS = ["rgba(80,200,120,0.55)", "rgba(225,82,82,0.55)", "rgba(96,165,255,0.55)"] as const;
+
 function calcMaterial(chess: Chess) {
   const initial: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
   const onBoard: Record<string, { w: number; b: number }> = {
@@ -95,6 +100,18 @@ function formatClock(ms: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Classifica o tipo de lance (para som)
+function classifyMove(prev: Chess, next: Chess): "move" | "capture" | "check" | "castle" | "promote" {
+  const history = next.history({ verbose: true });
+  const last = history[history.length - 1];
+  if (!last) return "move";
+  if (next.inCheck?.()) return "check";
+  if (last.flags?.includes("p")) return "promote";
+  if (last.flags?.includes("k") || last.flags?.includes("q")) return "castle";
+  if (last.flags?.includes("c") || last.flags?.includes("e")) return "capture";
+  return "move";
+}
+
 export function MatchClient({
   initialMatch,
   viewerId,
@@ -110,6 +127,7 @@ export function MatchClient({
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalMoveStyles, setLegalMoveStyles] = useState<Record<string, React.CSSProperties>>({});
   const [premoveStyles, setPremoveStyles] = useState<Record<string, React.CSSProperties>>({});
+  const [annotationStyles, setAnnotationStyles] = useState<Record<string, React.CSSProperties>>({});
   const [copied, setCopied] = useState<"fen" | "pgn" | "url" | null>(null);
   const [achievements, setAchievements] = useState<EarnedAchievement[]>([]);
   const [skinDrop, setSkinDrop] = useState<SkinDrop | null>(null);
@@ -119,29 +137,35 @@ export function MatchClient({
   const [reportDetails, setReportDetails] = useState("");
   const [reportSent, setReportSent] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [muteOn, setMuteOnState] = useState<boolean>(false);
+  const [orientationOverride, setOrientationOverride] = useState<"white" | "black" | null>(null);
+  const [endShown, setEndShown] = useState(false);
+  const [endVisible, setEndVisible] = useState(false);
+  const [incrementBump, setIncrementBump] = useState<{ color: "w" | "b"; amount: number; key: number } | null>(null);
 
-  // Relógio: contador ao vivo derivado do servidor
   const [now, setNow] = useState(() => Date.now());
-
-  // Promoção: armazenamos { from, to } enquanto esperamos a escolha da peça
   const [promotionPending, setPromotionPending] = useState<{ from: string; to: string } | null>(null);
 
-  // Chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(true);
+
+  const [pgnIndex, setPgnIndex] = useState<number | null>(null);
+
   const chatListRef = useRef<HTMLDivElement>(null);
-
-  // Navegação no PGN
-  const [pgnIndex, setPgnIndex] = useState<number | null>(null); // null = "ao vivo"
-
   const premoveRef = useRef<{ from: string; to: string } | null>(null);
   const achievementCheckedRef = useRef(false);
   const dropCheckedRef = useRef(false);
   const busyRef = useRef(busy);
   useEffect(() => { busyRef.current = busy; }, [busy]);
   const flaggedRef = useRef(false);
+  const lastMoveCountForSoundRef = useRef(initialMatch.move_count);
+  const lastIncrementRef = useRef<{ w: number | null; b: number | null }>({ w: initialMatch.white_time_ms, b: initialMatch.black_time_ms });
+  const lowTimeBeepRef = useRef<number>(0);
+  const matchStartSoundRef = useRef(false);
+
+  useEffect(() => { setMuteOnState(isMuted()); }, []);
 
   useEffect(() => {
     fetch("/api/skins")
@@ -156,14 +180,13 @@ export function MatchClient({
   const isViewerBlack = match.black_user_id === viewerId;
   const isPlayer = isViewerWhite || isViewerBlack;
   const myColor: "w" | "b" | null = isViewerWhite ? "w" : isViewerBlack ? "b" : null;
-  const orientation: "white" | "black" = isViewerBlack ? "black" : "white";
+  const baseOrientation: "white" | "black" = isViewerBlack ? "black" : "white";
+  const orientation: "white" | "black" = orientationOverride ?? baseOrientation;
   const isBotMatch =
     match.status !== "WAITING" &&
     (match.white_user === null || match.black_user === null);
   const hasClock = match.time_control_seconds !== null && match.time_control_seconds !== undefined;
 
-  // Game completo a partir do PGN — usado para navegação histórica.
-  // Reproduzimos o PGN inteiro num único Chess para ter acesso a history({verbose:true}).
   const fullChess = useMemo(() => {
     const c = new Chess();
     try {
@@ -173,9 +196,8 @@ export function MatchClient({
     return c;
   }, [match.fen, match.pgn]);
 
-  // Posição mostrada no tabuleiro: a "ao vivo" (último lance) ou histórica (pgnIndex).
-  // pgnIndex é o índice no array de history(), 0..N. null = posição atual.
   const fullHistory = useMemo(() => fullChess.history({ verbose: true }), [fullChess]);
+  const sanHistory  = useMemo(() => fullChess.history(), [fullChess]);
 
   const isLiveView = pgnIndex === null || pgnIndex === fullHistory.length;
   const displayChess = useMemo(() => {
@@ -197,11 +219,11 @@ export function MatchClient({
     setPromotionPending(null);
   }, [match.move_count]);
 
-  // Volta automaticamente pro modo "ao vivo" quando há lance novo, se você é jogador.
   useEffect(() => {
     if (isPlayer) setPgnIndex(null);
   }, [match.move_count, isPlayer]);
 
+  // Achievements check
   useEffect(() => {
     if (match.status !== "FINISHED" || !isPlayer || achievementCheckedRef.current) return;
     achievementCheckedRef.current = true;
@@ -242,7 +264,6 @@ export function MatchClient({
     const newMatch: MatchData = data.match;
 
     setMatch((prev) => {
-      // Atualiza se o move_count, status, ou clock mudou
       if (
         newMatch.move_count === prev.move_count &&
         newMatch.status === prev.status &&
@@ -290,7 +311,7 @@ export function MatchClient({
     }
   }, [match.id, myColor]);
 
-  // Polling + (opcional) Realtime
+  // Polling + Realtime (mantém realtime se disponível; polling como fallback)
   useEffect(() => {
     if (match.status === "FINISHED" || match.status === "CANCELLED") return;
 
@@ -311,9 +332,6 @@ export function MatchClient({
         )
         .subscribe();
     }
-
-    // Polling fica como fallback. Se realtime começar a entregar eventos,
-    // espaçamos pra reduzir custo.
     pollRef.current = setInterval(() => { if (!realtimeUp) refresh(); }, 1500);
 
     return () => {
@@ -329,9 +347,8 @@ export function MatchClient({
     return () => clearInterval(t);
   }, [hasClock, match.status]);
 
-  // Cálculo do tempo restante para cada cor (cliente)
   const liveTimes = useMemo(() => {
-    if (!hasClock) return { w: null, b: null };
+    if (!hasClock) return { w: null as number | null, b: null as number | null };
     const baseW = match.white_time_ms ?? (match.time_control_seconds ?? 0) * 1000;
     const baseB = match.black_time_ms ?? (match.time_control_seconds ?? 0) * 1000;
     if (match.status !== "ACTIVE" || !match.last_move_at) return { w: baseW, b: baseB };
@@ -341,7 +358,7 @@ export function MatchClient({
   }, [hasClock, match.white_time_ms, match.black_time_ms, match.time_control_seconds,
       match.status, match.last_move_at, match.turn, now]);
 
-  // Auto-flag por tempo quando esgotar
+  // Auto-flag por tempo
   useEffect(() => {
     if (!hasClock || match.status !== "ACTIVE" || flaggedRef.current) return;
     const remaining = match.turn === "w" ? liveTimes.w : liveTimes.b;
@@ -353,10 +370,94 @@ export function MatchClient({
     }
   }, [hasClock, match.status, match.id, match.turn, liveTimes.w, liveTimes.b, refresh]);
 
-  // Reseta flagRef quando recomeça partida (ex.: novo match via rematch)
   useEffect(() => { flaggedRef.current = false; }, [match.id]);
 
-  // Highlights
+  // Som de início (uma vez quando entra em ACTIVE)
+  useEffect(() => {
+    if (match.status === "ACTIVE" && !matchStartSoundRef.current) {
+      matchStartSoundRef.current = true;
+      playSound("start");
+    }
+  }, [match.status]);
+
+  // Som por tipo de lance + animação de incremento
+  useEffect(() => {
+    if (match.move_count <= lastMoveCountForSoundRef.current) {
+      // Reset (rematch / view change)
+      lastMoveCountForSoundRef.current = match.move_count;
+      lastIncrementRef.current = { w: match.white_time_ms, b: match.black_time_ms };
+      return;
+    }
+    // Decide o tipo de lance pelo último na história
+    try {
+      const kind = classifyMove(new Chess(), fullChess);
+      playSound(kind);
+    } catch { /* ignore */ }
+    lastMoveCountForSoundRef.current = match.move_count;
+
+    // Detecta incremento aplicado
+    if (hasClock && match.time_increment_seconds > 0) {
+      // Qual lado acabou de jogar?
+      const movedColor: "w" | "b" = match.turn === "w" ? "b" : "w";
+      const prev = movedColor === "w" ? lastIncrementRef.current.w : lastIncrementRef.current.b;
+      const curr = movedColor === "w" ? match.white_time_ms : match.black_time_ms;
+      if (prev != null && curr != null && curr > prev) {
+        setIncrementBump({ color: movedColor, amount: match.time_increment_seconds, key: Date.now() });
+        setTimeout(() => setIncrementBump(null), 900);
+      }
+    }
+    lastIncrementRef.current = { w: match.white_time_ms, b: match.black_time_ms };
+  }, [match.move_count, match.white_time_ms, match.black_time_ms, hasClock, match.time_increment_seconds, match.turn, fullChess]);
+
+  // Beep de tempo curto: tocar a cada segundo quando o nosso relógio entra em <15s
+  useEffect(() => {
+    if (!hasClock || match.status !== "ACTIVE" || !myColor) return;
+    const myMs = myColor === "w" ? liveTimes.w : liveTimes.b;
+    if (myMs === null || myMs > 15_000 || match.turn !== myColor) return;
+    const sec = Math.floor(myMs / 1000);
+    if (sec !== lowTimeBeepRef.current && sec >= 0 && sec <= 10) {
+      lowTimeBeepRef.current = sec;
+      playSound("lowTime");
+    }
+  }, [hasClock, match.status, match.turn, myColor, liveTimes.w, liveTimes.b]);
+
+  // Modal de fim de jogo (uma vez)
+  useEffect(() => {
+    if (match.status === "FINISHED" && !endShown) {
+      setEndShown(true);
+      setEndVisible(true);
+      // Som
+      if (isPlayer) {
+        const r = match.result ?? "";
+        if (r.includes("DRAW")) playSound("draw");
+        else if (match.winner?.id === viewerId) playSound("winSelf");
+        else playSound("loseSelf");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.status, match.result, endShown]);
+
+  // Som ao receber mensagem nova (apenas se viewer não é o autor)
+  const lastMsgCountRef = useRef(0);
+  useEffect(() => {
+    if (messages.length > lastMsgCountRef.current) {
+      const last = messages[messages.length - 1];
+      if (last && last.user_id !== viewerId) playSound("notify");
+      lastMsgCountRef.current = messages.length;
+    }
+  }, [messages, viewerId]);
+
+  // Som de oferta de empate recebida
+  const drawOfferedByOppRef = useRef<string | null>(null);
+  useEffect(() => {
+    const offered = match.draw_offered_by;
+    if (offered && offered !== viewerId && offered !== drawOfferedByOppRef.current) {
+      playSound("notify");
+    }
+    drawOfferedByOppRef.current = offered;
+  }, [match.draw_offered_by, viewerId]);
+
+  // Highlights derivados
   const lastMoveStyles = useMemo(() => {
     const moves = displayChess.history({ verbose: true });
     const last = moves[moves.length - 1];
@@ -382,9 +483,23 @@ export function MatchClient({
     return {};
   }, [displayChess]);
 
+  // Setas (último lance) — cast por causa do tipo Square do react-chessboard
+  const customArrows = useMemo(() => {
+    const moves = displayChess.history({ verbose: true });
+    const last = moves[moves.length - 1];
+    if (!last) return [] as unknown[] as never[];
+    return ([[last.from, last.to, "rgba(245,179,1,0.65)"]] as unknown) as never[];
+  }, [displayChess]);
+
   const customSquareStyles = useMemo(
-    () => ({ ...lastMoveStyles, ...checkStyles, ...premoveStyles, ...legalMoveStyles }),
-    [lastMoveStyles, checkStyles, premoveStyles, legalMoveStyles]
+    () => ({
+      ...lastMoveStyles,
+      ...checkStyles,
+      ...annotationStyles,
+      ...premoveStyles,
+      ...legalMoveStyles,
+    }),
+    [lastMoveStyles, checkStyles, annotationStyles, premoveStyles, legalMoveStyles]
   );
 
   const { capturedByWhite, capturedByBlack, advantage } = useMemo(
@@ -393,6 +508,23 @@ export function MatchClient({
   );
 
   const isMyTurn = isPlayer && match.status === "ACTIVE" && match.turn === myColor && isLiveView;
+
+  // Detecção de claim de empate (chess.js)
+  const drawClaimable = useMemo(() => {
+    if (match.status !== "ACTIVE" || !isPlayer || !isLiveView) return null as null | string;
+    try {
+      if (fullChess.isThreefoldRepetition?.()) return "Repetição tripla";
+      if (fullChess.isInsufficientMaterial?.()) return "Material insuficiente";
+      if (fullChess.isDraw?.()) return "Regra dos 50 lances / posição morta";
+    } catch { /* ignore */ }
+    return null;
+  }, [fullChess, match.status, isPlayer, isLiveView]);
+
+  // Opening name
+  const openingName = useMemo(() => {
+    if (sanHistory.length === 0 || sanHistory.length > 20) return null;
+    return detectOpening(sanHistory);
+  }, [sanHistory]);
 
   function selectSquare(sq: string) {
     const piece = displayChess.get(sq as Parameters<typeof displayChess.get>[0]);
@@ -422,6 +554,22 @@ export function MatchClient({
   function clearPremove() {
     premoveRef.current = null;
     setPremoveStyles({});
+  }
+
+  // Cycle de anotação numa casa
+  function cycleAnnotation(sq: string) {
+    setAnnotationStyles((prev) => {
+      const cur = prev[sq]?.backgroundColor as string | undefined;
+      const idx = cur ? ANNOTATION_COLORS.indexOf(cur as typeof ANNOTATION_COLORS[number]) : -1;
+      const next = ANNOTATION_COLORS[(idx + 1) % ANNOTATION_COLORS.length];
+      // Se já estava na última cor, limpa
+      if (idx === ANNOTATION_COLORS.length - 1) {
+        const copy = { ...prev };
+        delete copy[sq];
+        return copy;
+      }
+      return { ...prev, [sq]: { backgroundColor: next } };
+    });
   }
 
   function onSquareClick(sq: string) {
@@ -474,7 +622,14 @@ export function MatchClient({
     }
   }
 
-  function onSquareRightClick() { clearPremove(); }
+  function onSquareRightClick(sq: string) {
+    // Se há premove, cancela primeiro
+    if (premoveRef.current) {
+      clearPremove();
+      return;
+    }
+    cycleAnnotation(sq);
+  }
 
   function isPromotionMove(from: string, to: string): boolean {
     const piece = displayChess.get(from as Parameters<typeof displayChess.get>[0]);
@@ -490,9 +645,7 @@ export function MatchClient({
     if (match.status !== "ACTIVE") return false;
     if (!myColor || match.turn !== myColor) return false;
 
-    // Promoção: pedir escolha antes de enviar
     if (isPromotionMove(source, target)) {
-      // Verifica se o destino é legal antes (sem promoção fica ilegal)
       const test = new Chess(match.fen);
       if (match.pgn) { try { test.loadPgn(match.pgn); } catch { /* ignore */ } }
       try {
@@ -579,6 +732,16 @@ export function MatchClient({
     await refresh();
   }
 
+  async function claimDraw() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/matches/${match.id}/claim-draw`, { method: "POST" });
+    const data = await res.json();
+    setBusy(false);
+    if (!res.ok) { setError(data.error ?? "Erro"); return; }
+    await refresh();
+  }
+
   async function requestRematch() {
     setBusy(true);
     setError(null);
@@ -586,7 +749,7 @@ export function MatchClient({
     const data = await res.json();
     setBusy(false);
     if (!res.ok) { setError(data.error ?? "Erro"); return; }
-    const result = data.result ?? data.result?.match_id ? data.result : data;
+    const result = data.result ?? data;
     const newId = result?.match_id;
     const auto = result?.auto_started;
     if (auto && newId) {
@@ -617,7 +780,7 @@ export function MatchClient({
     } catch { /* ignore */ }
   }
 
-  // Chat: load + realtime/poll
+  // Chat
   const loadMessages = useCallback(async () => {
     const res = await fetch(`/api/matches/${match.id}/chat`);
     if (!res.ok) return;
@@ -673,6 +836,34 @@ export function MatchClient({
     await loadMessages();
   }
 
+  // Atalhos de teclado
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+
+      const total = fullHistory.length;
+      const cur = isLiveView ? total : (pgnIndex ?? 0);
+      if (e.key === "ArrowLeft")        { e.preventDefault(); if (cur > 0) setPgnIndex(cur - 1); }
+      else if (e.key === "ArrowRight")  { e.preventDefault(); if (cur < total) setPgnIndex(cur + 1 === total ? null : cur + 1); }
+      else if (e.key === "ArrowUp" || e.key === "Home")
+                                        { e.preventDefault(); setPgnIndex(0); }
+      else if (e.key === "ArrowDown" || e.key === "End")
+                                        { e.preventDefault(); setPgnIndex(null); }
+      else if (e.key === "f" || e.key === "F")
+                                        { e.preventDefault(); setOrientationOverride((v) => v ? null : (baseOrientation === "white" ? "black" : "white")); }
+      else if (e.key === "m" || e.key === "M") {
+                                          e.preventDefault();
+                                          const nv = !muteOn;
+                                          setMuted(nv);
+                                          setMuteOnState(nv);
+                                        }
+      else if (e.key === "Escape")      { setAnnotationStyles({}); clearPremove(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullHistory.length, isLiveView, pgnIndex, baseOrientation, muteOn]);
+
   // Players e info
   const topColor: "w" | "b" = orientation === "white" ? "b" : "w";
   const bottomColor: "w" | "b" = orientation === "white" ? "w" : "b";
@@ -702,46 +893,85 @@ export function MatchClient({
     ? `@${bottomUser?.username ?? "Você"}`
     : "Espectador";
 
-  // Draw offer info
   const drawOfferedByMe   = match.draw_offered_by === viewerId;
   const drawOfferedByOpp  = match.draw_offered_by !== null && !drawOfferedByMe && match.draw_offered_by !== undefined;
-  // Rematch info
   const rematchOfferedByMe  = match.rematch_offered_by === viewerId;
   const rematchOfferedByOpp = match.rematch_offered_by !== null && !rematchOfferedByMe && match.rematch_offered_by !== undefined;
 
-  // Promotion piece visual
   const promotionColor = myColor ?? "w";
+
+  // Posição da peça de promoção como % do tabuleiro
+  const promotionStyle = useMemo<React.CSSProperties | null>(() => {
+    if (!promotionPending) return null;
+    const file = promotionPending.to.charCodeAt(0) - "a".charCodeAt(0); // 0..7
+    const rank = parseInt(promotionPending.to[1], 10);                   // 1..8
+    const fileIdx = orientation === "white" ? file : 7 - file;
+    const rankIdx = orientation === "white" ? 8 - rank : rank - 1;       // 0 = top
+    return {
+      left:  `${fileIdx * 12.5}%`,
+      top:   `${rankIdx * 12.5}%`,
+      width: "12.5%",
+      // Direção: se promovendo no topo, pilha vai pra baixo; se na base, pilha vai pra cima
+      transform: rankIdx === 0 ? "translate(0,0)" : "translate(0, calc(-300% + 12.5% * 4))",
+    };
+  }, [promotionPending, orientation]);
+
+  // Eventos do modal de fim de jogo
+  const iWon       = match.winner?.id === viewerId;
+  const iAmInvolved = isPlayer && match.status === "FINISHED";
+  const endLabel   = resultLabel(match.result);
+  const endSubtitle = (() => {
+    if (!iAmInvolved) return null;
+    if (match.result?.includes("DRAW")) return "Apostas devolvidas. Rating ajustado.";
+    if (iWon && match.payout > 0) return `Você ganhou ${formatCoins(match.payout)} coins.`;
+    if (!iWon && match.wager > 0) return `Você perdeu ${formatCoins(match.wager)} coins.`;
+    return null;
+  })();
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-      {/* Promotion modal */}
-      {promotionPending && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="rounded-xl border border-border bg-surface p-5 shadow-xl">
-            <h2 className="mb-3 text-center text-sm font-semibold">Promover peão</h2>
-            <div className="grid grid-cols-4 gap-2">
-              {([
-                { key: "q", w: "♕", b: "♛", label: "Rainha" },
-                { key: "r", w: "♖", b: "♜", label: "Torre" },
-                { key: "b", w: "♗", b: "♝", label: "Bispo" },
-                { key: "n", w: "♘", b: "♞", label: "Cavalo" },
-              ] as const).map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => confirmPromotion(p.key)}
-                  className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surfaceAlt px-4 py-3 transition-colors hover:border-accent hover:bg-accent/10"
-                >
-                  <span className="text-3xl">{promotionColor === "w" ? p.w : p.b}</span>
-                  <span className="text-[10px] uppercase tracking-wider text-muted">{p.label}</span>
-                </button>
-              ))}
+      {/* Game-over modal */}
+      {endVisible && match.status === "FINISHED" && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+            <div className="text-center">
+              <div className="text-5xl">
+                {match.result?.includes("DRAW")
+                  ? "🤝"
+                  : iAmInvolved
+                    ? iWon ? "👑" : "😔"
+                    : "🏁"}
+              </div>
+              <h2 className="mt-2 text-xl font-bold">
+                {iAmInvolved
+                  ? iWon ? "Vitória!" : match.result?.includes("DRAW") ? "Empate" : "Derrota"
+                  : "Partida encerrada"}
+              </h2>
+              <p className="mt-1 text-sm text-muted">{endLabel}</p>
+              {endSubtitle && <p className="mt-2 text-sm">{endSubtitle}</p>}
+              {match.winner && !match.result?.includes("DRAW") && (
+                <p className="mt-1 text-xs text-muted">Vencedor: <span className="font-mono">@{match.winner.username}</span></p>
+              )}
             </div>
-            <button
-              onClick={() => setPromotionPending(null)}
-              className="mt-3 w-full rounded border border-border py-1.5 text-xs text-muted hover:border-danger/40 hover:text-danger"
-            >
-              Cancelar lance
-            </button>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              {isPlayer && !isBotMatch && (
+                match.rematch_match_id ? (
+                  <Link href={`/match/${match.rematch_match_id}`} className="btn-primary col-span-2 text-center">
+                    🔁 Ir para o rematch
+                  </Link>
+                ) : rematchOfferedByOpp ? (
+                  <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">Aceitar rematch 🔁</button>
+                ) : rematchOfferedByMe ? (
+                  <div className="col-span-2 rounded border border-accent/30 px-3 py-2 text-center text-xs text-accent">
+                    Aguardando rematch…
+                  </div>
+                ) : (
+                  <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">Pedir rematch 🔁</button>
+                )
+              )}
+              <Link href="/lobby" className="btn-secondary text-center">Lobby</Link>
+              <button onClick={() => setEndVisible(false)} className="btn-secondary">Ver tabuleiro</button>
+            </div>
           </div>
         </div>
       )}
@@ -786,21 +1016,16 @@ export function MatchClient({
         </div>
       )}
 
-      {/* Achievement toasts */}
+      {/* Toasts */}
       {achievements.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 space-y-2">
           {achievements.map((a) => (
-            <div
-              key={a.id}
-              className="flex items-center gap-3 rounded-xl border border-accent/40 bg-surface px-4 py-3 shadow-glow"
-            >
+            <div key={a.id} className="flex items-center gap-3 rounded-xl border border-accent/40 bg-surface px-4 py-3 shadow-glow">
               <span className="text-2xl">{a.icon}</span>
               <div>
                 <div className="text-xs font-bold text-accent">Nova conquista!</div>
                 <div className="text-sm font-semibold">{a.name}</div>
-                {a.reward_coins > 0 && (
-                  <div className="text-xs text-success">+{a.reward_coins} coins</div>
-                )}
+                {a.reward_coins > 0 && <div className="text-xs text-success">+{a.reward_coins} coins</div>}
               </div>
               <button
                 onClick={() => setAchievements((prev) => prev.filter((x) => x.id !== a.id))}
@@ -813,19 +1038,15 @@ export function MatchClient({
 
       {skinDrop && (
         <div className="fixed bottom-4 left-4 z-50">
-          <div
-            className="flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 shadow-glow"
-            style={{ borderColor: RARITY_COLORS[skinDrop.rarity] + "66" }}
-          >
+          <div className="flex items-center gap-3 rounded-xl border bg-surface px-4 py-3 shadow-glow"
+               style={{ borderColor: RARITY_COLORS[skinDrop.rarity] + "66" }}>
             <span className="text-2xl">🎁</span>
             <div>
               <div className="text-xs font-bold" style={{ color: RARITY_COLORS[skinDrop.rarity] }}>
                 Drop de skin! ({RARITY_LABELS[skinDrop.rarity]})
               </div>
               <div className="text-sm font-semibold">{skinDrop.skin_name}</div>
-              <Link href="/inventory" className="text-xs text-accent hover:underline">
-                Ver inventário
-              </Link>
+              <Link href="/inventory" className="text-xs text-accent hover:underline">Ver inventário</Link>
             </div>
             <button onClick={() => setSkinDrop(null)} className="ml-2 text-muted hover:text-white">×</button>
           </div>
@@ -845,14 +1066,29 @@ export function MatchClient({
                 ⏱ {Math.round((match.time_control_seconds ?? 0) / 60)}{match.time_increment_seconds > 0 ? `+${match.time_increment_seconds}` : ""}
               </span>
             )}
+            {orientationOverride && (
+              <span className="ml-2 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">
+                Tabuleiro invertido
+              </span>
+            )}
           </h1>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 text-xs">
+            <button
+              onClick={() => { const v = !muteOn; setMuted(v); setMuteOnState(v); }}
+              title={muteOn ? "Som: desativado (M)" : "Som: ativado (M)"}
+              className="text-muted transition-colors hover:text-white"
+            >{muteOn ? "🔇" : "🔊"}</button>
+            <button
+              onClick={() => setOrientationOverride((v) => v ? null : (baseOrientation === "white" ? "black" : "white"))}
+              title="Inverter tabuleiro (F)"
+              className="text-muted transition-colors hover:text-white"
+            >⇅</button>
             <button
               onClick={() => copyText(typeof window !== "undefined" ? window.location.href : "", "url")}
               title="Copiar link da partida"
-              className="text-xs text-muted transition-colors hover:text-white"
-            >{copied === "url" ? "✓ Copiado" : "🔗 Compartilhar"}</button>
-            <Link href="/lobby" className="text-sm text-muted transition-colors hover:text-white">← Lobby</Link>
+              className="text-muted transition-colors hover:text-white"
+            >{copied === "url" ? "✓ Copiado" : "🔗"}</button>
+            <Link href="/lobby" className="text-muted transition-colors hover:text-white">← Lobby</Link>
           </div>
         </div>
 
@@ -867,6 +1103,7 @@ export function MatchClient({
           clockMs={topClockMs}
           hasClock={hasClock}
           isLowTime={hasClock && topIsTurn && (topClockMs ?? Infinity) < 30_000}
+          incrementBump={incrementBump?.color === topColor ? incrementBump : null}
         />
 
         <div className="relative">
@@ -878,7 +1115,9 @@ export function MatchClient({
             onSquareRightClick={onSquareRightClick}
             arePiecesDraggable={isLiveView && (isMyTurn || (!isMyTurn && isPlayer && match.status === "ACTIVE")) && !busy}
             customSquareStyles={customSquareStyles}
+            customArrows={customArrows}
             showBoardNotation={true}
+            animationDuration={150}
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.65)" }}
             customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
             customLightSquareStyle={{ backgroundColor: skin.boardLight }}
@@ -893,7 +1132,31 @@ export function MatchClient({
               navegando — lance {pgnIndex} / {fullHistory.length}
             </div>
           )}
+          {/* Picker de promoção sobre a casa */}
+          {promotionPending && promotionStyle && (
+            <div className="absolute z-20" style={promotionStyle}>
+              <div className="flex flex-col overflow-hidden rounded-md border border-accent/60 bg-surface shadow-2xl">
+                {(["q","r","b","n"] as const).map((p, i) => (
+                  <button
+                    key={p}
+                    onClick={() => confirmPromotion(p)}
+                    className="flex items-center justify-center bg-surface text-2xl text-white transition-colors hover:bg-accent/30"
+                    style={{ aspectRatio: "1 / 1" }}
+                    title={i === 0 ? "Rainha (Q)" : i === 1 ? "Torre (R)" : i === 2 ? "Bispo (B)" : "Cavalo (N)"}
+                  >{promotionColor === "w" ? ({q:"♕",r:"♖",b:"♗",n:"♘"} as Record<string,string>)[p] : ({q:"♛",r:"♜",b:"♝",n:"♞"} as Record<string,string>)[p]}</button>
+                ))}
+                <button onClick={() => setPromotionPending(null)} className="bg-surfaceAlt py-0.5 text-[10px] text-muted hover:text-danger">×</button>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Opening */}
+        {openingName && (
+          <div className="rounded border border-border bg-surfaceAlt/40 px-3 py-1 text-center text-xs text-muted">
+            📖 {openingName}
+          </div>
+        )}
 
         {isBotMatch && busy && !sendingMove && (
           <div className="flex items-center gap-2 px-1 text-xs text-muted">
@@ -913,9 +1176,10 @@ export function MatchClient({
           clockMs={bottomClockMs}
           hasClock={hasClock}
           isLowTime={hasClock && bottomIsTurn && (bottomClockMs ?? Infinity) < 30_000}
+          incrementBump={incrementBump?.color === bottomColor ? incrementBump : null}
         />
 
-        {/* Draw offer banner — opponent offered */}
+        {/* Draw offer banner */}
         {match.status === "ACTIVE" && isPlayer && drawOfferedByOpp && (
           <div className="flex items-center justify-between rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm">
             <span>O oponente está oferecendo empate.</span>
@@ -925,7 +1189,6 @@ export function MatchClient({
             </div>
           </div>
         )}
-        {/* Draw offer banner — I offered */}
         {match.status === "ACTIVE" && isPlayer && drawOfferedByMe && (
           <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-400">
             Aguardando resposta do oponente para o empate…
@@ -939,8 +1202,28 @@ export function MatchClient({
           </div>
         )}
 
+        {/* Claim de empate */}
+        {drawClaimable && (
+          <div className="flex items-center justify-between rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs">
+            <span className="text-blue-300">Posição empatada ({drawClaimable})</span>
+            <button onClick={claimDraw} disabled={busy} className="rounded bg-blue-500/30 px-2 py-0.5 text-white hover:bg-blue-500/50">
+              Reivindicar empate
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="rounded border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+        )}
+
+        {/* Cheat-sheet de atalhos */}
+        {match.status === "ACTIVE" && isPlayer && (
+          <div className="text-[10px] text-muted/70">
+            <kbd className="rounded border border-border bg-surfaceAlt px-1">←</kbd> <kbd className="rounded border border-border bg-surfaceAlt px-1">→</kbd> navegar lances ·
+            <kbd className="ml-2 rounded border border-border bg-surfaceAlt px-1">F</kbd> inverter ·
+            <kbd className="ml-2 rounded border border-border bg-surfaceAlt px-1">M</kbd> som ·
+            <kbd className="ml-2 rounded border border-border bg-surfaceAlt px-1">Esc</kbd> limpar marcações · right-click marca casas
+          </div>
         )}
       </div>
 
@@ -986,33 +1269,22 @@ export function MatchClient({
             {match.status === "ACTIVE" && isPlayer && (
               <>
                 {!isBotMatch && !drawOfferedByMe && !drawOfferedByOpp && (
-                  <button onClick={() => drawAction("offer")} disabled={busy} className="btn-secondary">
-                    Oferecer empate
-                  </button>
+                  <button onClick={() => drawAction("offer")} disabled={busy} className="btn-secondary">Oferecer empate</button>
                 )}
                 <button onClick={resign} disabled={busy} className="btn-danger">Desistir</button>
               </>
             )}
             {match.status === "FINISHED" && (
               <>
-                {/* Rematch (apenas H-vs-H) */}
                 {isPlayer && !isBotMatch && (
                   match.rematch_match_id ? (
-                    <Link href={`/match/${match.rematch_match_id}`} className="btn-primary text-center">
-                      Ir para o rematch
-                    </Link>
+                    <Link href={`/match/${match.rematch_match_id}`} className="btn-primary text-center">Ir para o rematch</Link>
                   ) : rematchOfferedByMe ? (
-                    <div className="rounded border border-accent/30 px-3 py-2 text-center text-xs text-accent">
-                      Aguardando oponente aceitar o rematch…
-                    </div>
+                    <div className="rounded border border-accent/30 px-3 py-2 text-center text-xs text-accent">Aguardando oponente aceitar o rematch…</div>
                   ) : rematchOfferedByOpp ? (
-                    <button onClick={requestRematch} disabled={busy} className="btn-primary">
-                      Aceitar rematch
-                    </button>
+                    <button onClick={requestRematch} disabled={busy} className="btn-primary">Aceitar rematch</button>
                   ) : (
-                    <button onClick={requestRematch} disabled={busy} className="btn-secondary">
-                      Pedir rematch
-                    </button>
+                    <button onClick={requestRematch} disabled={busy} className="btn-secondary">Pedir rematch</button>
                   )
                 )}
                 <Link href="/lobby" className="btn-primary text-center">Voltar ao lobby</Link>
@@ -1064,7 +1336,6 @@ export function MatchClient({
               </button>
             </div>
           </div>
-          {/* PGN nav controls */}
           {fullHistory.length > 0 && (
             <div className="mb-2 flex items-center justify-between gap-1 text-[11px]">
               <button onClick={() => setPgnIndex(0)} disabled={(pgnIndex ?? fullHistory.length) === 0} className="rounded border border-border px-2 py-0.5 text-muted hover:border-accent/50 hover:text-accent disabled:opacity-30">⏮</button>
@@ -1082,7 +1353,6 @@ export function MatchClient({
               moveCount={match.move_count}
               currentIndex={isLiveView ? fullHistory.length : pgnIndex ?? 0}
               onClickMove={(idx) => setPgnIndex(idx)}
-              onClickLive={() => setPgnIndex(null)}
             />
           </div>
         </div>
@@ -1142,7 +1412,7 @@ export function MatchClient({
 
 function PlayerBar({
   user, color, isTurn, placeholder, captured, advantage, isMe,
-  clockMs, hasClock, isLowTime,
+  clockMs, hasClock, isLowTime, incrementBump,
 }: {
   user: { username: string; rating: number; games_played?: number } | null;
   color: "w" | "b";
@@ -1154,6 +1424,7 @@ function PlayerBar({
   clockMs: number | null;
   hasClock: boolean;
   isLowTime: boolean;
+  incrementBump: { color: "w" | "b"; amount: number; key: number } | null;
 }) {
   const sortedCaptures = [...captured].sort(
     (a, b) => PIECE_ORDER.indexOf(a) - PIECE_ORDER.indexOf(b)
@@ -1189,10 +1460,20 @@ function PlayerBar({
         )}
       </div>
       {hasClock && (
-        <div className={`shrink-0 rounded px-2 py-0.5 font-mono text-sm tabular-nums ${
-          isLowTime ? "bg-danger/20 text-danger" : isTurn ? "bg-accent/20 text-accent" : "bg-surface text-muted"
-        }`}>
-          {formatClock(clockMs)}
+        <div className="relative shrink-0">
+          <div className={`rounded px-2 py-0.5 font-mono text-sm tabular-nums transition-colors ${
+            isLowTime ? "animate-pulse bg-danger/25 text-danger" : isTurn ? "bg-accent/20 text-accent" : "bg-surface text-muted"
+          }`}>
+            {formatClock(clockMs)}
+          </div>
+          {incrementBump && (
+            <span
+              key={incrementBump.key}
+              className="pointer-events-none absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold text-success animate-float-up"
+            >
+              +{incrementBump.amount}s
+            </span>
+          )}
         </div>
       )}
       {!hasClock && isTurn && (
@@ -1218,13 +1499,12 @@ function StatusBadge({ status, result }: { status: string; result: string | null
 }
 
 function PgnList({
-  pgn, moveCount, currentIndex, onClickMove, onClickLive,
+  pgn, moveCount, currentIndex, onClickMove,
 }: {
   pgn: string;
   moveCount: number;
   currentIndex: number;
   onClickMove: (index: number) => void;
-  onClickLive: () => void;
 }) {
   const listRef = useRef<HTMLOListElement>(null);
 

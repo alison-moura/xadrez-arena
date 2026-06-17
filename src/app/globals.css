@@ -17,7 +17,16 @@ body {
   box-sizing: border-box;
 }
 
+@keyframes floatUp {
+  0%   { transform: translate(-50%, 0)    scale(1);   opacity: 0;   }
+  20%  { transform: translate(-50%, -4px) scale(1.1); opacity: 1;   }
+  100% { transform: translate(-50%, -24px) scale(0.9); opacity: 0;  }
+}
+
 @layer utilities {
+  .animate-float-up {
+    animation: floatUp 0.9s ease-out forwards;
+  }
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: #2a2a3a transparent;
