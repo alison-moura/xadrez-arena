@@ -25,7 +25,7 @@ export default async function PublicProfilePage({ params }: { params: { username
   // Stats agregadas (até 100 partidas finalizadas não-bot)
   const { data: matches } = await supabase
     .from("chess_matches")
-    .select("id, result, winner_id, white_user_id, black_user_id, time_control_seconds, time_increment_seconds, payout, finished_at, white_rating_delta, black_rating_delta")
+    .select("id, result, winner_id, white_user_id, black_user_id, time_control_seconds, time_increment_seconds, payout, finished_at, white_rating_delta, black_rating_delta, move_count")
     .or(`white_user_id.eq.${user.id},black_user_id.eq.${user.id}`)
     .eq("status", "FINISHED")
     .is("bot_difficulty", null)
@@ -52,6 +52,32 @@ export default async function PublicProfilePage({ params }: { params: { username
     reverseTrajectory.push(runningRating);
   }
   const ratingSeries = reverseTrajectory.slice().reverse();
+
+  // Insights: lances médios + horário mais ativo
+  const moveCounts = (matches ?? []).map((m) => m.move_count ?? 0).filter((n) => n > 0);
+  const avgMoves = moveCounts.length > 0
+    ? Math.round(moveCounts.reduce((s, n) => s + n, 0) / moveCounts.length)
+    : 0;
+
+  const hourCounts = new Array<number>(24).fill(0);
+  for (const m of (matches ?? [])) {
+    if (!m.finished_at) continue;
+    const h = new Date(m.finished_at).getHours();
+    hourCounts[h]++;
+  }
+  let peakHour = -1, peakCount = 0;
+  for (let h = 0; h < 24; h++) {
+    if (hourCounts[h] > peakCount) { peakCount = hourCounts[h]; peakHour = h; }
+  }
+  const peakHourLabel = peakHour >= 0 ? `${String(peakHour).padStart(2, "0")}h` : "—";
+
+  // Cores favoritas — white vs black win rates
+  const asWhite = (matches ?? []).filter((m) => m.white_user_id === user.id);
+  const asBlack = (matches ?? []).filter((m) => m.black_user_id === user.id);
+  const whiteWins = asWhite.filter((m) => m.winner_id === user.id).length;
+  const blackWins = asBlack.filter((m) => m.winner_id === user.id).length;
+  const whiteWinRate = asWhite.length > 0 ? Math.round((whiteWins / asWhite.length) * 100) : 0;
+  const blackWinRate = asBlack.length > 0 ? Math.round((blackWins / asBlack.length) * 100) : 0;
 
   // Conquistas
   const { data: achievements } = await supabase
@@ -148,6 +174,16 @@ export default async function PublicProfilePage({ params }: { params: { username
             Trajetória de rating
           </h2>
           <Sparkline values={ratingSeries} />
+        </div>
+      )}
+
+      {/* Insights agregados */}
+      {total > 0 && (
+        <div className="grid gap-3 sm:grid-cols-4">
+          <StatBox label="Média de lances" value={avgMoves.toString()} tone="muted" />
+          <StatBox label="Horário ativo" value={peakHourLabel} tone="muted" />
+          <StatBox label="WR com brancas" value={`${whiteWinRate}%`} tone={whiteWinRate >= 50 ? "success" : "danger"} />
+          <StatBox label="WR com pretas" value={`${blackWinRate}%`} tone={blackWinRate >= 50 ? "success" : "danger"} />
         </div>
       )}
 
