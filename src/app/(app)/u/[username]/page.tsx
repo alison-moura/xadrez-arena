@@ -79,6 +79,30 @@ export default async function PublicProfilePage({ params }: { params: { username
   const whiteWinRate = asWhite.length > 0 ? Math.round((whiteWins / asWhite.length) * 100) : 0;
   const blackWinRate = asBlack.length > 0 ? Math.round((blackWins / asBlack.length) * 100) : 0;
 
+  // Records pessoais (apenas vitórias e jogos válidos)
+  const wonMatches = (matches ?? []).filter((m) => m.winner_id === user.id);
+  const fastestMate = wonMatches.reduce<{ id: string; moves: number } | null>((acc, m) => {
+    if (!m.move_count) return acc;
+    if (!acc || m.move_count < acc.moves) return { id: m.id, moves: m.move_count };
+    return acc;
+  }, null);
+  const longestGame = (matches ?? []).reduce<{ id: string; moves: number } | null>((acc, m) => {
+    if (!m.move_count) return acc;
+    if (!acc || m.move_count > acc.moves) return { id: m.id, moves: m.move_count };
+    return acc;
+  }, null);
+  const biggestRatingGain = wonMatches.reduce<{ id: string; delta: number } | null>((acc, m) => {
+    const d = m.white_user_id === user.id ? m.white_rating_delta : m.black_rating_delta;
+    if (!d || d <= 0) return acc;
+    if (!acc || d > acc.delta) return { id: m.id, delta: d };
+    return acc;
+  }, null);
+  const biggestWin = wonMatches.reduce<{ id: string; payout: number } | null>((acc, m) => {
+    if (!m.payout) return acc;
+    if (!acc || m.payout > acc.payout) return { id: m.id, payout: m.payout };
+    return acc;
+  }, null);
+
   // Conquistas
   const { data: achievements } = await supabase
     .from("chess_user_achievements")
@@ -187,6 +211,27 @@ export default async function PublicProfilePage({ params }: { params: { username
         </div>
       )}
 
+      {/* Records pessoais */}
+      {(fastestMate || longestGame || biggestRatingGain || biggestWin) && (
+        <div className="card space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">🏆 Records</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {fastestMate && (
+              <RecordRow icon="⚡" label="Vitória mais rápida" value={`${fastestMate.moves} lances`} matchId={fastestMate.id} />
+            )}
+            {longestGame && (
+              <RecordRow icon="🐢" label="Partida mais longa" value={`${longestGame.moves} lances`} matchId={longestGame.id} />
+            )}
+            {biggestRatingGain && (
+              <RecordRow icon="📈" label="Maior ganho de rating" value={`+${biggestRatingGain.delta}`} matchId={biggestRatingGain.id} />
+            )}
+            {biggestWin && (
+              <RecordRow icon="💰" label="Maior prêmio" value={`${formatCoins(biggestWin.payout)} coins`} matchId={biggestWin.id} />
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Puzzles (apenas no seu próprio perfil — dados locais) */}
       {isMe && <PuzzleStatsCard />}
 
@@ -245,6 +290,21 @@ export default async function PublicProfilePage({ params }: { params: { username
         )}
       </div>
     </div>
+  );
+}
+
+function RecordRow({ icon, label, value, matchId }: { icon: string; label: string; value: string; matchId: string }) {
+  return (
+    <Link
+      href={`/match/${matchId}`}
+      className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surfaceAlt/40 px-3 py-2 text-xs transition-colors hover:border-accent/40"
+    >
+      <span className="flex items-center gap-2">
+        <span className="text-base">{icon}</span>
+        <span className="text-muted">{label}</span>
+      </span>
+      <span className="font-mono font-semibold text-white">{value}</span>
+    </Link>
   );
 }
 
