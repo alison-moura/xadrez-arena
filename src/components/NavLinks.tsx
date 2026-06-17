@@ -11,6 +11,7 @@ const NAV = [
   { href: "/history", label: "Histórico" },
   { href: "/notes", label: "Anotações" },
   { href: "/leaderboard", label: "Ranking" },
+  { href: "/stats", label: "Stats" },
   { href: "/achievements", label: "Conquistas" },
   { href: "/overwatch", label: "Overwatch" },
   { href: "/shop", label: "Loja" },
