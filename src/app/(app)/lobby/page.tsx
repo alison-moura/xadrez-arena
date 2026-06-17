@@ -6,6 +6,7 @@ import { formatCoins } from "@/lib/utils";
 import { DailyBonusBanner } from "@/components/DailyBonusBanner";
 import { PuzzleCard } from "@/components/PuzzleCard";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import { CountdownTimer } from "@/components/CountdownTimer";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +122,10 @@ export default async function LobbyPage() {
                   </div>
                 </div>
               </div>
-              <span className="badge-accent text-[10px]">jogar pra pontuar</span>
+              <div className="flex flex-col items-end gap-0.5">
+                <CountdownTimer endsAt={t.ends_at} prefix="encerra em" className="text-[11px]" />
+                <span className="badge-accent text-[10px]">jogar pra pontuar</span>
+              </div>
             </Link>
           ))}
         </div>

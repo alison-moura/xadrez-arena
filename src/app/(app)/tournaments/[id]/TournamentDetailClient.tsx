@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatCoins } from "@/lib/utils";
+import { CountdownTimer } from "@/components/CountdownTimer";
 
 type Player = {
   user_id: string;
@@ -90,13 +91,16 @@ export function TournamentDetailClient({ id }: { id: string }) {
             {tournament.description && (
               <p className="mt-2 text-sm text-muted">{tournament.description}</p>
             )}
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
               <span className="badge">⏱ {formatTC(tournament.time_control_seconds, tournament.time_increment_seconds)}</span>
               <span className="badge">👥 {players.length} inscrito{players.length !== 1 ? "s" : ""}</span>
               {tournament.entry_fee > 0 ? (
                 <span className="badge">💸 entrada {formatCoins(tournament.entry_fee)}</span>
               ) : (
                 <span className="badge-success">grátis</span>
+              )}
+              {isActive && (
+                <CountdownTimer endsAt={tournament.ends_at} prefix="⏳ encerra em" className="text-xs" />
               )}
             </div>
           </div>
