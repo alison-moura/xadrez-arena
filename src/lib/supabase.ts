@@ -61,6 +61,9 @@ export function rpcError(err: unknown): string {
     if (msg.includes("rating_too_low")) return "Seu rating é muito baixo para esta partida";
     if (msg.includes("rating_too_high")) return "Seu rating é muito alto para esta partida";
     if (msg.includes("forbidden")) return "Acesso negado";
+    if (msg.includes("tournament_not_found")) return "Torneio não encontrado";
+    if (msg.includes("tournament_not_open")) return "Torneio não está aceitando inscrições";
+    if (msg.includes("tournament_ended")) return "Torneio já terminou";
     if (msg.includes("not_pending")) return "Saque não está pendente";
     if (msg.includes("not_approved")) return "Saque não está aprovado";
     if (msg.includes("not_found")) return "Não encontrado";

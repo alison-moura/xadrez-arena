@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { Chess } from "chess.js";
 import Link from "next/link";
+import { getStockfish } from "@/lib/stockfish-client";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -49,6 +50,7 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
     black_accuracy: match.black_accuracy,
   });
   const [analyzing, setAnalyzing] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analyzed, setAnalyzed] = useState(!!match.analyzed_at);
 
@@ -99,24 +101,107 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
     return result;
   }, [match.pgn]);
 
+  // Tenta server primeiro (cache rápido). Se 503 (Stockfish indisponível),
+  // cai pra Stockfish WASM local.
   const requestAnalysis = useCallback(async () => {
     setAnalyzing(true);
     setError(null);
+    setProgress(null);
     try {
+      // 1. Server-side (rápido se Stockfish estiver disponível, ou se já em cache)
       const res = await fetch(`/api/matches/${match.id}/analyze`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) {
+      if (res.ok) {
+        setAnalysis(data.analysis);
+        setAnalyzed(true);
+        return;
+      }
+      if (!data.unavailable) {
         setError(data.error ?? "Erro");
         return;
       }
-      setAnalysis(data.analysis);
+
+      // 2. Fallback: Stockfish WASM no browser
+      const sf = getStockfish();
+      await sf.init();
+
+      // Reconstrói cada FEN da partida
+      const fens: string[] = [];
+      const chess = new Chess();
+      fens.push(chess.fen());
+      const tokens = (match.pgn ?? "")
+        .replace(/\{[^}]*\}/g, "")
+        .replace(/\([^)]*\)/g, "")
+        .split(/\s+/)
+        .filter((t) => t && !/^(\d+\.+|1-0|0-1|1\/2|½|\*)/.test(t));
+      for (const san of tokens) {
+        const m = chess.move(san);
+        if (!m) break;
+        fens.push(chess.fen());
+      }
+
+      const total = fens.length - 1;
+      if (total === 0) {
+        setError("Partida sem lances para analisar");
+        return;
+      }
+      setProgress({ done: 0, total });
+
+      let whiteCpl = 0, blackCpl = 0, wc = 0, bc = 0;
+
+      // Avalia depth 10 — bom equilíbrio entre precisão e velocidade
+      const depth = 10;
+      let prevCp = (await sf.evaluate(fens[0], depth)).cp;
+      for (let i = 1; i <= total; i++) {
+        const currentCp = (await sf.evaluate(fens[i], depth)).cp;
+        // Quem acabou de jogar: lado oposto ao "side-to-move" atual.
+        // cp em fens[i] é do POV do lado a mover; o lado que jogou viu
+        // sua avaliação inverter de sinal entre i-1 e i.
+        const moverPrevCp = prevCp;         // POV do mover (jogador i-1)
+        const moverNewCp  = -currentCp;     // POV invertido pelo lance
+        const cpl = Math.max(0, moverPrevCp - moverNewCp);
+
+        // Alterna cores: se i é par, brancas acabaram de jogar (na verdade i ímpar = brancas)
+        // fens[0] = posição inicial (brancas a mover). fens[1] = após branco jogar (pretas a mover).
+        // Então em i=1 quem moveu foi branco. i ímpar → branco.
+        const movedWhite = (i % 2) === 1;
+        if (movedWhite) { whiteCpl += cpl; wc++; }
+        else            { blackCpl += cpl; bc++; }
+
+        prevCp = currentCp;
+        setProgress({ done: i, total });
+      }
+
+      const whiteAvgCpl = wc > 0 ? whiteCpl / wc : 0;
+      const blackAvgCpl = bc > 0 ? blackCpl / bc : 0;
+      const accuracy = (cpl: number) => Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * cpl) - 3.1669));
+      const result = {
+        white_avg_cpl:  whiteAvgCpl,
+        black_avg_cpl:  blackAvgCpl,
+        white_accuracy: accuracy(whiteAvgCpl),
+        black_accuracy: accuracy(blackAvgCpl),
+      };
+      setAnalysis(result);
       setAnalyzed(true);
+
+      // Persiste no banco (não bloqueante)
+      void fetch(`/api/matches/${match.id}/analysis-persist`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          whiteAvgCpl:   result.white_avg_cpl,
+          blackAvgCpl:   result.black_avg_cpl,
+          whiteAccuracy: result.white_accuracy,
+          blackAccuracy: result.black_accuracy,
+        }),
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro");
     } finally {
       setAnalyzing(false);
+      setProgress(null);
     }
-  }, [match.id]);
+  }, [match.id, match.pgn]);
 
   const currentFen = positions[ply] ?? positions[0];
 
@@ -205,15 +290,34 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
             {!analyzed && !isBotMatch && (
               <div className="space-y-2">
                 <p className="text-xs text-muted">
-                  A IA Stockfish vai avaliar cada lance e calcular accuracy e CPL (perda em centipawns).
+                  Stockfish vai avaliar cada lance e calcular accuracy e CPL (perda em centipawns).
                 </p>
-                <button
-                  onClick={requestAnalysis}
-                  disabled={analyzing}
-                  className="btn-primary w-full text-sm"
-                >
-                  {analyzing ? "Analisando…" : "Solicitar análise"}
-                </button>
+                {!analyzing && (
+                  <button
+                    onClick={requestAnalysis}
+                    className="btn-primary w-full text-sm"
+                  >Solicitar análise</button>
+                )}
+                {analyzing && progress === null && (
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                    Carregando engine Stockfish (~7MB)…
+                  </div>
+                )}
+                {analyzing && progress && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted">Analisando lance {progress.done}/{progress.total}</span>
+                      <span className="font-mono text-accent">{Math.round((progress.done / progress.total) * 100)}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surfaceAlt">
+                      <div
+                        className="h-full bg-accent transition-all"
+                        style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 {error && <p className="text-xs text-danger">{error}</p>}
               </div>
             )}
