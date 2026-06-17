@@ -61,6 +61,18 @@ const CAPTURED_SYMBOLS: Record<string, string> = { q: "♛", r: "♜", b: "♝",
 // Cores cíclicas para anotação (right-click) — estilo Lichess
 const ANNOTATION_COLORS = ["rgba(80,200,120,0.55)", "rgba(225,82,82,0.55)", "rgba(96,165,255,0.55)"] as const;
 
+// Reactions rápidos no chat
+const QUICK_REACTIONS: { label: string; text: string }[] = [
+  { label: "👋",  text: "Olá!" },
+  { label: "🎯",  text: "Boa jogada!" },
+  { label: "🤝",  text: "GG" },
+  { label: "😅",  text: "Ufa" },
+  { label: "💪",  text: "Vamos!" },
+  { label: "🍀",  text: "Boa sorte" },
+  { label: "👏",  text: "Parabéns" },
+  { label: "🤔",  text: "Hmm…" },
+];
+
 function calcMaterial(chess: Chess) {
   const initial: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1 };
   const onBoard: Record<string, { w: number; b: number }> = {
@@ -138,6 +150,7 @@ export function MatchClient({
   const [reportDetails, setReportDetails] = useState("");
   const [reportSent, setReportSent] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
+  const [resignConfirmOpen, setResignConfirmOpen] = useState(false);
   const [muteOn, setMuteOnState] = useState<boolean>(false);
   const [orientationOverride, setOrientationOverride] = useState<"white" | "black" | null>(null);
   const [endShown, setEndShown] = useState(false);
@@ -477,6 +490,41 @@ export function MatchClient({
     drawOfferedByOppRef.current = offered;
   }, [match.draw_offered_by, viewerId]);
 
+  // Title flash quando aba está oculta e fica nossa vez
+  const originalTitleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (originalTitleRef.current === null) originalTitleRef.current = document.title;
+    const isMy = match.status === "ACTIVE" && match.turn === myColor && isPlayer;
+    if (!isMy) {
+      if (originalTitleRef.current) document.title = originalTitleRef.current;
+      return;
+    }
+    if (!document.hidden) return; // só pisca se a aba está em background
+
+    let on = true;
+    const interval = setInterval(() => {
+      document.title = on ? "(♟) Sua vez!" : (originalTitleRef.current ?? "Sua vez!");
+      on = !on;
+    }, 1000);
+    // som inicial
+    playSound("notify");
+    return () => {
+      clearInterval(interval);
+      if (originalTitleRef.current) document.title = originalTitleRef.current;
+    };
+  }, [match.status, match.turn, myColor, isPlayer]);
+
+  // Reset title quando a aba volta a ficar visível
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    function onVis() {
+      if (!document.hidden && originalTitleRef.current) document.title = originalTitleRef.current;
+    }
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
   // Highlights derivados
   const lastMoveStyles = useMemo(() => {
     const moves = displayChess.history({ verbose: true });
@@ -778,6 +826,10 @@ export function MatchClient({
         const ok = test.move({ from: source, to: target, promotion: "q" });
         if (!ok) return false;
       } catch { return false; }
+      // Settings: auto-promote pra rainha (configurável em /settings)
+      let autoQ = false;
+      try { autoQ = typeof window !== "undefined" && localStorage.getItem("xa.autoPromote") === "1"; } catch { /* ignore */ }
+      if (autoQ) return submitMove(source, target, "q");
       setPromotionPending({ from: source, to: target });
       return true;
     }
@@ -816,8 +868,8 @@ export function MatchClient({
     submitMove(from, to, piece);
   }
 
-  async function resign() {
-    if (!confirm("Tem certeza que deseja desistir?")) return;
+  async function confirmResign() {
+    setResignConfirmOpen(false);
     setBusy(true);
     const res = await fetch(`/api/matches/${match.id}/resign`, { method: "POST" });
     const data = await res.json();
@@ -825,6 +877,7 @@ export function MatchClient({
     if (!res.ok) { setError(data.error ?? "Erro"); return; }
     setMatch(data.match);
   }
+  function resign() { setResignConfirmOpen(true); }
 
   async function cancel() {
     setBusy(true);
@@ -942,12 +995,7 @@ export function MatchClient({
     if (chatListRef.current) chatListRef.current.scrollTop = chatListRef.current.scrollHeight;
   }, [messages.length]);
 
-  async function sendChat(e: React.FormEvent) {
-    e.preventDefault();
-    const content = chatDraft.trim();
-    if (!content) return;
-    setChatError(null);
-    setChatDraft("");
+  async function postChat(content: string) {
     const res = await fetch(`/api/matches/${match.id}/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -956,10 +1004,25 @@ export function MatchClient({
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setChatError(data.error ?? "Erro ao enviar");
-      setChatDraft(content);
-      return;
+      return false;
     }
     await loadMessages();
+    return true;
+  }
+
+  async function sendChat(e: React.FormEvent) {
+    e.preventDefault();
+    const content = chatDraft.trim();
+    if (!content) return;
+    setChatError(null);
+    setChatDraft("");
+    const ok = await postChat(content);
+    if (!ok) setChatDraft(content);
+  }
+
+  async function sendQuickReaction(text: string) {
+    setChatError(null);
+    await postChat(text);
   }
 
   // Atalhos de teclado
@@ -1131,6 +1194,24 @@ export function MatchClient({
         </div>
       )}
 
+      {/* Resign confirm modal */}
+      {resignConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-5 shadow-xl">
+            <h2 className="text-lg font-semibold">Desistir da partida?</h2>
+            <p className="mt-2 text-sm text-muted">
+              {match.wager > 0
+                ? <>O oponente leva o pote de <span className="text-accent font-semibold">{formatCoins(match.pot)} coins</span>{!isBotMatch && " e ganha rating ELO sobre você"}.</>
+                : <>O oponente vence{!isBotMatch && " e ganha rating ELO sobre você"}.</>}
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button onClick={confirmResign} className="btn-danger flex-1">Desistir</button>
+              <button onClick={() => setResignConfirmOpen(false)} className="btn-secondary flex-1">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Report modal */}
       {reportOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -1288,7 +1369,7 @@ export function MatchClient({
             customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
             customLightSquareStyle={{ backgroundColor: skin.boardLight }}
           />
-          {sendingMove && (
+          {sendingMove && !isBotMatch && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-black/20">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             </div>
@@ -1324,7 +1405,7 @@ export function MatchClient({
           </div>
         )}
 
-        {isBotMatch && busy && !sendingMove && (
+        {isBotMatch && (busy || sendingMove) && (
           <div className="flex items-center gap-2 px-1 text-xs text-muted">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
             Bot está pensando…
@@ -1556,17 +1637,31 @@ export function MatchClient({
                   )}
                 </div>
                 {isPlayer && (
-                  <form onSubmit={sendChat} className="flex gap-1">
-                    <input
-                      type="text"
-                      maxLength={240}
-                      value={chatDraft}
-                      onChange={(e) => setChatDraft(e.target.value)}
-                      placeholder="Mensagem…"
-                      className="input flex-1 py-1 text-xs"
-                    />
-                    <button type="submit" disabled={!chatDraft.trim()} className="btn-primary px-3 py-1 text-xs">↑</button>
-                  </form>
+                  <>
+                    {/* Quick reactions */}
+                    <div className="mb-1 flex flex-wrap gap-1">
+                      {QUICK_REACTIONS.map((r) => (
+                        <button
+                          key={r.label}
+                          type="button"
+                          onClick={() => sendQuickReaction(r.text)}
+                          title={r.text}
+                          className="rounded-full border border-border bg-surfaceAlt px-2 py-0.5 text-[10px] text-muted transition-colors hover:border-accent/50 hover:text-white"
+                        >{r.label}</button>
+                      ))}
+                    </div>
+                    <form onSubmit={sendChat} className="flex gap-1">
+                      <input
+                        type="text"
+                        maxLength={240}
+                        value={chatDraft}
+                        onChange={(e) => setChatDraft(e.target.value)}
+                        placeholder="Mensagem…"
+                        className="input flex-1 py-1 text-xs"
+                      />
+                      <button type="submit" disabled={!chatDraft.trim()} className="btn-primary px-3 py-1 text-xs">↑</button>
+                    </form>
+                  </>
                 )}
                 {chatError && <p className="mt-1 text-[10px] text-danger">{chatError}</p>}
               </>

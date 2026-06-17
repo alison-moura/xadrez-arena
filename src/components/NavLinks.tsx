@@ -12,6 +12,7 @@ const NAV = [
   { href: "/inventory", label: "Inventário" },
   { href: "/market", label: "Mercado" },
   { href: "/wallet", label: "Carteira" },
+  { href: "/settings", label: "Config" },
 ];
 
 export function NavLinks({ mobile = false, isAdmin = false }: { mobile?: boolean; isAdmin?: boolean }) {

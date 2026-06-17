@@ -103,6 +103,26 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const [creatingBot, setCreatingBot] = useState(false);
   const [tcIdx, setTcIdx] = useState(3); // default 5+3 blitz
   const [tcFilter, setTcFilter] = useState<TCCategory>("all");
+  const [quickMatching, setQuickMatching] = useState(false);
+
+  async function quickMatch() {
+    setQuickMatching(true);
+    setError(null);
+    const tc = TIME_PRESETS[tcIdx];
+    const res = await fetch("/api/matches/quick-match", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        timeControlSeconds:   tc.sec,
+        timeIncrementSeconds: tc.inc,
+        wager,
+      }),
+    });
+    const data = await res.json();
+    setQuickMatching(false);
+    if (!res.ok) { setError(data.error ?? "Erro ao buscar partida"); return; }
+    router.push(`/match/${data.matchId}`);
+  }
 
   async function load() {
     const [w, a] = await Promise.all([
@@ -305,11 +325,29 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
 
       {/* Sidebar */}
       <aside className="space-y-4">
+        {/* Quick match */}
+        <div className="card border-accent/40 ring-1 ring-accent/20">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold">⚡ Quick Match</h3>
+            <span className="badge-accent text-[10px]">recomendado</span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            Encontra ou cria uma partida com sua aposta e tempo. Sem complicação.
+          </p>
+          <button
+            onClick={quickMatch}
+            disabled={quickMatching}
+            className="btn-primary mt-3 w-full"
+          >
+            {quickMatching ? "Buscando…" : `Jogar agora (${TIME_PRESETS[tcIdx].label})`}
+          </button>
+        </div>
+
         {/* Create match */}
         <div className="card">
           <h3 className="text-base font-semibold">Criar partida</h3>
           <p className="mt-1 text-xs text-muted">
-            Aposta vai pra escrow. Vencedor leva o pote com 5% de rake.
+            Configure tempo, faixa de rating e cor. Aposta vai pra escrow. Vencedor leva o pote com 5% de rake.
           </p>
           <form onSubmit={createMatch} className="mt-4 space-y-4">
             <div>
