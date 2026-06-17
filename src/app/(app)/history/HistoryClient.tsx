@@ -83,6 +83,17 @@ export function HistoryClient({ matches, userId }: { matches: HistoryRow[]; user
     cancelled: classified.filter((m) => m.kind === "cancelled").length,
   }), [classified]);
 
+  const summary = useMemo(() => {
+    let won = 0, lost = 0;
+    for (const m of classified) {
+      if (m.kind === "win")  won  += m.payout ?? 0;
+      if (m.kind === "loss") lost += m.wager ?? 0;
+    }
+    const total = counts.wins + counts.losses + counts.draws;
+    const winRate = total > 0 ? Math.round((counts.wins / total) * 100) : 0;
+    return { netCoins: won - lost, winRate, total };
+  }, [classified, counts]);
+
   const filtered = useMemo(() => {
     return classified.filter((m) => {
       if (resultFilter !== "all" && m.kind !== resultFilter.replace(/s$/, "") as typeof m.kind) {
@@ -105,6 +116,16 @@ export function HistoryClient({ matches, userId }: { matches: HistoryRow[]; user
           Mostrando {filtered.length} de {classified.length}
         </div>
       </div>
+
+      {/* Resumo agregado */}
+      {classified.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <SummaryBox label="Partidas" value={summary.total.toString()} />
+          <SummaryBox label="Win rate" value={`${summary.winRate}%`} tone={summary.winRate >= 50 ? "success" : "muted"} />
+          <SummaryBox label="Vitórias" value={`${counts.wins}W ${counts.draws}E ${counts.losses}D`} />
+          <SummaryBox label="Saldo" value={formatCoins(summary.netCoins)} tone={summary.netCoins >= 0 ? "success" : "danger"} />
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="space-y-2">
@@ -188,6 +209,16 @@ export function HistoryClient({ matches, userId }: { matches: HistoryRow[]; user
           })}
         </ul>
       )}
+    </div>
+  );
+}
+
+function SummaryBox({ label, value, tone }: { label: string; value: string; tone?: "success" | "danger" | "muted" }) {
+  const c = tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : "text-white";
+  return (
+    <div className="card py-2.5">
+      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
+      <div className={`mt-0.5 text-base font-bold ${c}`}>{value}</div>
     </div>
   );
 }
