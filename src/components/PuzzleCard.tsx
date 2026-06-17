@@ -32,11 +32,8 @@ export function PuzzleCard() {
   const solvedToday = state.lastDay === todayKey;
 
   return (
-    <Link
-      href="/puzzle"
-      className="card flex items-center justify-between gap-3 border-purple-500/30 transition-colors hover:border-purple-500/60"
-    >
-      <div className="flex items-center gap-3">
+    <div className="card flex items-center justify-between gap-3 border-purple-500/30 transition-colors hover:border-purple-500/60">
+      <Link href="/puzzle" className="flex items-center gap-3 flex-1">
         <span className="text-2xl">🧩</span>
         <div>
           <div className="text-sm font-semibold">
@@ -49,13 +46,20 @@ export function PuzzleCard() {
               : "Resolva o desafio tático de hoje e mantenha sua sequência."}
           </div>
         </div>
-      </div>
-      <div className="flex flex-col items-end gap-0.5">
-        {state.streak > 0 && (
-          <span className="badge-accent text-[10px]">🔥 {state.streak} dia{state.streak === 1 ? "" : "s"}</span>
-        )}
+      </Link>
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-1.5">
+          {state.streak > 0 && (
+            <span className="badge-accent text-[10px]">🔥 {state.streak} dia{state.streak === 1 ? "" : "s"}</span>
+          )}
+          <Link
+            href="/puzzle?random=1"
+            className="rounded border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-300 transition-colors hover:bg-purple-500/20"
+            title="Puzzle aleatório"
+          >🎲</Link>
+        </div>
         <span className="text-[10px] text-muted">{state.totalSolved} resolvidos</span>
       </div>
-    </Link>
+    </div>
   );
 }

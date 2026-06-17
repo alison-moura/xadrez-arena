@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamicLoad from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Chess } from "chess.js";
 import { play as playSound } from "@/lib/sounds";
 import { PUZZLE_BANK, type PuzzleDef, themeLabel } from "@/lib/puzzles";
@@ -94,6 +95,24 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [boardPrefs, setBoardPrefs] = useState(() => getBoardPrefs());
   useEffect(() => { setBoardPrefs(getBoardPrefs()); }, []);
+
+  // ?random=1 na URL → escolhe um puzzle aleatório do banco no mount
+  const search = useSearchParams();
+  const randomQueryHandledRef = useRef(false);
+  useEffect(() => {
+    if (randomQueryHandledRef.current) return;
+    if (search?.get("random") !== "1") return;
+    randomQueryHandledRef.current = true;
+    const t = PUZZLE_BANK[Math.floor(Math.random() * PUZZLE_BANK.length)];
+    if (t) {
+      setCurrentId(t.id);
+      isDailyRef.current = false;
+      chess.load(t.fen);
+      setFen(chess.fen());
+      setStatus("intro");
+      setMoveIdx(0);
+    }
+  }, [search, chess]);
   const isDailyRef = useRef(currentId === puzzle.id);
 
   // Carrega estado salvo
