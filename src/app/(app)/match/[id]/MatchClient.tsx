@@ -987,7 +987,12 @@ export function MatchClient({
       {/* Game-over modal */}
       {endVisible && match.status === "FINISHED" && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-2xl border border-border bg-surface p-6 shadow-2xl">
+            <button
+              onClick={() => setEndVisible(false)}
+              aria-label="Fechar"
+              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surfaceAlt text-muted transition-colors hover:border-danger/40 hover:text-danger"
+            >×</button>
             <div className="text-center">
               <div className="text-5xl">
                 {match.result?.includes("DRAW")
@@ -1008,23 +1013,47 @@ export function MatchClient({
               )}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-2">
+              {/* Revanche (rematch) — só humanos */}
               {isPlayer && !isBotMatch && (
                 match.rematch_match_id ? (
                   <Link href={`/match/${match.rematch_match_id}`} className="btn-primary col-span-2 text-center">
-                    🔁 Ir para o rematch
+                    🔁 Ir para a revanche
                   </Link>
                 ) : rematchOfferedByOpp ? (
-                  <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">Aceitar rematch 🔁</button>
+                  <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">🔁 Aceitar revanche</button>
                 ) : rematchOfferedByMe ? (
-                  <div className="col-span-2 rounded border border-accent/30 px-3 py-2 text-center text-xs text-accent">
-                    Aguardando rematch…
+                  <div className="col-span-2 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 text-center text-xs text-accent">
+                    Aguardando revanche…
                   </div>
                 ) : (
-                  <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">Pedir rematch 🔁</button>
+                  <button onClick={requestRematch} disabled={busy} className="btn-primary col-span-2">🔁 Revanche</button>
                 )
               )}
-              <Link href="/lobby" className="btn-secondary text-center">Lobby</Link>
-              <button onClick={() => setEndVisible(false)} className="btn-secondary">Ver tabuleiro</button>
+
+              {/* Novo oponente — botão grande pra todos os jogadores */}
+              {isPlayer && (
+                <Link
+                  href="/lobby"
+                  className="btn-secondary col-span-2 text-center"
+                >
+                  👥 Novo oponente
+                </Link>
+              )}
+
+              {/* Análise — apenas humanos, partida finalizada */}
+              {isPlayer && !isBotMatch && (
+                <Link
+                  href={`/match/${match.id}/review`}
+                  className="btn-secondary text-center"
+                >
+                  📊 Análise
+                </Link>
+              )}
+
+              {/* Fechar */}
+              <button onClick={() => setEndVisible(false)} className={`btn-secondary ${isPlayer && !isBotMatch ? "" : "col-span-2"}`}>
+                Fechar
+              </button>
             </div>
           </div>
         </div>

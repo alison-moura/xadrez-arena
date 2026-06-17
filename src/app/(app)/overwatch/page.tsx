@@ -110,22 +110,7 @@ export default function OverwatchPage() {
   }
 
   if (!eligible) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Overwatch</h1>
-            <p className="mt-1 text-sm text-muted">Revisão comunitária de partidas suspeitas</p>
-          </div>
-          <Link href="/lobby" className="btn-secondary text-sm">← Lobby</Link>
-        </div>
-        <div className="card py-12 text-center">
-          <div className="mb-3 text-4xl">🔒</div>
-          <div className="font-semibold text-white">Acesso restrito</div>
-          <p className="mt-2 text-sm text-muted">{reason}</p>
-        </div>
-      </div>
-    );
+    return <OverwatchLanding reason={reason} />;
   }
 
   return (
@@ -310,6 +295,123 @@ export default function OverwatchPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function OverwatchLanding({ reason }: { reason: string }) {
+  return (
+    <div className="space-y-8">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-surface via-surface to-accent/5 px-6 py-10 text-center sm:px-10 sm:py-14">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(245,179,1,0.10),transparent_40%),radial-gradient(circle_at_70%_80%,rgba(120,80,220,0.10),transparent_40%)]" />
+        <div className="relative">
+          <div className="mb-3 text-5xl">⚖️</div>
+          <h1 className="text-3xl font-bold sm:text-4xl">Overwatch</h1>
+          <p className="mt-3 text-base text-muted sm:text-lg">
+            O sistema de justiça comunitária do Xadrez Arena.<br />
+            Jogadores experientes revisam partidas suspeitas e decidem juntos.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-yellow-500/30 bg-yellow-500/10 px-4 py-2 text-sm">
+            <span className="text-yellow-300">🔒</span>
+            <span className="text-yellow-200">{reason || "Você ainda não tem acesso ao Overwatch."}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Como funciona */}
+      <section>
+        <h2 className="mb-4 text-xl font-bold">Como funciona</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            { icon: "🚨", title: "1. Denúncia", text: "Após uma partida, qualquer jogador pode denunciar o oponente por uso de engine, comportamento abusivo ou jogo lento intencional." },
+            { icon: "🔍", title: "2. Análise automática", text: "O Stockfish avalia a partida e calcula um score de suspeição. Se passar do limite, um caso é aberto pro Overwatch." },
+            { icon: "🗳️", title: "3. Voto da comunidade", text: "Árbitros elegíveis assistem o replay lance por lance e votam: limpo ou trapaça. Maioria decide." },
+          ].map((s) => (
+            <div key={s.title} className="card flex h-full flex-col gap-2">
+              <div className="text-3xl">{s.icon}</div>
+              <h3 className="font-semibold text-white">{s.title}</h3>
+              <p className="text-xs text-muted">{s.text}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Consequências */}
+      <section>
+        <h2 className="mb-4 text-xl font-bold">O que acontece após o veredito</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="card border-success/30">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-2xl">✅</span>
+              <h3 className="font-semibold text-success">Veredito: Limpo</h3>
+            </div>
+            <ul className="space-y-1.5 text-xs text-muted">
+              <li>• A acusação é descartada</li>
+              <li>• O score de suspeição do acusado é reduzido</li>
+              <li>• Árbitros que votaram "limpo" ganham <strong className="text-success">+50 coins</strong></li>
+            </ul>
+          </div>
+          <div className="card border-danger/30">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-2xl">🚫</span>
+              <h3 className="font-semibold text-danger">Veredito: Trapaça</h3>
+            </div>
+            <ul className="space-y-1.5 text-xs text-muted">
+              <li>• O acusado é <strong className="text-danger">banido</strong> automaticamente</li>
+              <li>• Partidas ativas dele são canceladas; apostas devolvidas pros dois lados</li>
+              <li>• Árbitros que votaram "trapaça" ganham <strong className="text-success">+50 coins</strong></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Quem participa */}
+      <section>
+        <div className="card flex flex-col items-center gap-4 text-center sm:flex-row sm:items-start sm:text-left">
+          <div className="text-5xl">🎓</div>
+          <div className="flex-1">
+            <h2 className="text-xl font-bold">Como me tornar Árbitro?</h2>
+            <p className="mt-2 text-sm text-muted">
+              Pra evitar que contas novas ou trolls decidam casos, o Overwatch só está aberto pra quem demonstrou comprometimento com o jogo.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border bg-surfaceAlt p-3">
+                <div className="text-xs uppercase tracking-wider text-muted">Requisito 1</div>
+                <div className="mt-1 font-semibold text-white">Rating ≥ 1500</div>
+                <div className="mt-1 text-[10px] text-muted">Ganhe partidas pra subir seu ELO.</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surfaceAlt p-3">
+                <div className="text-xs uppercase tracking-wider text-muted">OU Requisito 2</div>
+                <div className="mt-1 font-semibold text-white">50+ partidas jogadas</div>
+                <div className="mt-1 text-[10px] text-muted">Mostra que você conhece o jogo.</div>
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-muted">
+              Conta banida = sem acesso. Cumpra um dos requisitos e o acesso é desbloqueado automaticamente.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Conquista */}
+      <section>
+        <div className="card flex flex-wrap items-center gap-4">
+          <div className="text-4xl">⚖️</div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold">Conquista: Árbitro</h3>
+            <p className="text-xs text-muted">Vote corretamente em 10 análises de Overwatch e ganhe 200 coins extras.</p>
+          </div>
+          <Link href="/achievements" className="btn-secondary text-xs">Ver conquistas</Link>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <div className="flex justify-center pt-2">
+        <Link href="/lobby" className="btn-primary">
+          Começar a jogar ranqueadas
+        </Link>
+      </div>
     </div>
   );
 }
