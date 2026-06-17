@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { isMuted, setMuted, getPack, setPack, play as playSound, type SoundPack } from "@/lib/sounds";
 import { ANIM_SPEED_OPTIONS, type AnimSpeed } from "@/lib/board-prefs";
@@ -187,6 +187,9 @@ export function SettingsClient() {
         </div>
       </div>
 
+      {/* Backup / Restore */}
+      <BackupRestoreCard />
+
       {/* Atalhos */}
       <div className="card">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wider text-muted">Atalhos de teclado</h2>
@@ -208,6 +211,98 @@ export function SettingsClient() {
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
+
+function BackupRestoreCard() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  function collectXaKeys(): Record<string, string> {
+    const out: Record<string, string> = {};
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith("xa.")) continue;
+        const v = localStorage.getItem(k);
+        if (v !== null) out[k] = v;
+      }
+    } catch { /* ignore */ }
+    return out;
+  }
+
+  function exportPrefs() {
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: collectXaKeys(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `xadrez-arena-prefs-${d}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg({ kind: "ok", text: `Exportado ${Object.keys(payload.data).length} chaves.` });
+  }
+
+  function importPrefs() {
+    fileInputRef.current?.click();
+  }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (!json?.data || typeof json.data !== "object") {
+        setMsg({ kind: "err", text: "Arquivo inválido: faltando campo 'data'." });
+        return;
+      }
+      let count = 0;
+      for (const [k, v] of Object.entries(json.data)) {
+        if (!k.startsWith("xa.")) continue;
+        if (typeof v !== "string") continue;
+        localStorage.setItem(k, v);
+        count++;
+      }
+      setMsg({ kind: "ok", text: `${count} chaves importadas. Recarregando…` });
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      setMsg({ kind: "err", text: `Falha ao ler: ${(err as Error).message}` });
+    } finally {
+      // Permitir re-seleção do mesmo arquivo
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="card space-y-3">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Backup local</h2>
+      <p className="text-xs text-muted">
+        Exporte ou restaure suas preferências (som, tabuleiro, anotações, puzzles, favoritos).
+        Tudo o que está em <code className="text-accent">localStorage</code> sob o prefixo <code className="text-accent">xa.*</code>.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={exportPrefs} className="btn-secondary py-1.5 text-xs">⬇️ Exportar JSON</button>
+        <button onClick={importPrefs} className="btn-secondary py-1.5 text-xs">⬆️ Importar JSON</button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={onFile}
+        />
+      </div>
+      {msg && (
+        <p className={`text-[11px] ${msg.kind === "ok" ? "text-success" : "text-danger"}`}>
+          {msg.text}
+        </p>
+      )}
     </div>
   );
 }
