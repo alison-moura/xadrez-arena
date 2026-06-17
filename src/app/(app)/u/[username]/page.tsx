@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { formatCoins, formatDate } from "@/lib/utils";
 import { SKIN_DEFS } from "@/lib/skins";
 import { FollowButton } from "./FollowButton";
+import { PuzzleStatsCard } from "@/components/PuzzleStatsCard";
+import { Sparkline } from "@/components/Sparkline";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +25,7 @@ export default async function PublicProfilePage({ params }: { params: { username
   // Stats agregadas (até 100 partidas finalizadas não-bot)
   const { data: matches } = await supabase
     .from("chess_matches")
-    .select("id, result, winner_id, white_user_id, black_user_id, time_control_seconds, time_increment_seconds, payout, finished_at")
+    .select("id, result, winner_id, white_user_id, black_user_id, time_control_seconds, time_increment_seconds, payout, finished_at, white_rating_delta, black_rating_delta")
     .or(`white_user_id.eq.${user.id},black_user_id.eq.${user.id}`)
     .eq("status", "FINISHED")
     .is("bot_difficulty", null)
@@ -38,6 +40,18 @@ export default async function PublicProfilePage({ params }: { params: { username
   }
   const total = wins + losses + draws;
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+  // Trajetória de rating: partidas estão em ordem decrescente (mais recente primeiro).
+  // Pra montar a série cronológica, partimos do rating atual e subtraímos cada delta
+  // — assim conseguimos o rating *antes* daquela partida. Depois inverte.
+  let runningRating = user.rating;
+  const reverseTrajectory: number[] = [runningRating];
+  for (const m of (matches ?? []).slice(0, 30)) {
+    const delta = m.white_user_id === user.id ? m.white_rating_delta : m.black_rating_delta;
+    runningRating -= delta ?? 0;
+    reverseTrajectory.push(runningRating);
+  }
+  const ratingSeries = reverseTrajectory.slice().reverse();
 
   // Conquistas
   const { data: achievements } = await supabase
@@ -126,6 +140,19 @@ export default async function PublicProfilePage({ params }: { params: { username
         <StatBox label="Streak atual" value={`🔥 ${currentStreak}`} tone="muted" />
         <StatBox label="Total ganho"  value={`${formatCoins(totalWon)} coins`} tone="accent" />
       </div>
+
+      {/* Trajetória de rating */}
+      {ratingSeries.length > 1 && (
+        <div className="card space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
+            Trajetória de rating
+          </h2>
+          <Sparkline values={ratingSeries} />
+        </div>
+      )}
+
+      {/* Puzzles (apenas no seu próprio perfil — dados locais) */}
+      {isMe && <PuzzleStatsCard />}
 
       {/* Conquistas */}
       <div className="card">
