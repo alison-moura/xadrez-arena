@@ -366,6 +366,19 @@ UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
 - `src/components/MatchNoteCard.tsx` — textarea com debounce de 500ms.
 - Persistência em `localStorage` com chave `xa.matchNote.<matchId>`, valor `{ text, savedAt }`.
 - Renderizado apenas em partidas FINISHED para jogadores.
+- Página `/notes` (`src/app/(app)/notes/NotesClient.tsx`) lista todas, suporta busca, apagar individual e apagar tudo.
+
+## Profile insights
+
+Em `/u/[username]`:
+- **Média de lances** por partida (das últimas 100).
+- **Horário ativo**: hora do dia (0–23h) com mais partidas finalizadas.
+- **WR por cor**: separa win rate com brancas vs com pretas.
+- Tudo calculado SSR a partir do mesmo query de `chess_matches` já existente.
+
+## Achievements: progresso por categoria
+
+`/achievements` mostra um mini-card por categoria com barra de progresso colorida (verde se 100%, dourado caso contrário), antes da grade principal.
 
 ## Banco de puzzles (32)
 

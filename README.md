@@ -122,7 +122,12 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 ### Social
 - Sistema de seguir (`/following`) + status online
 - Perfil público com stats, conquistas, trajetória, últimas partidas
+- **Insights agregados** no perfil — lances médios, horário mais ativo, WR com brancas vs pretas
 - Bônus diário com streak
+
+### Anotações privadas
+- **Anotação por partida** (textarea auto-save em localStorage) só em partidas finalizadas
+- Página `/notes` lista todas as anotações com busca e link pra partida
 
 ## Setup
 
