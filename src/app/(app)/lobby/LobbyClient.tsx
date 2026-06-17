@@ -19,12 +19,15 @@ type Match = {
 
 type TimePreset = { label: string; sec: number | null; inc: number };
 const TIME_PRESETS: TimePreset[] = [
-  { label: "Sem tempo",   sec: null, inc: 0 },
-  { label: "1 min",       sec: 60,   inc: 0 },
+  { label: "30s ⚡⚡",     sec: 30,   inc: 0 },
+  { label: "1 min ⚡",     sec: 60,   inc: 0 },
+  { label: "2+1 bullet",  sec: 120,  inc: 1 },
   { label: "3 min",       sec: 180,  inc: 0 },
   { label: "5+3 blitz",   sec: 300,  inc: 3 },
   { label: "10 min",      sec: 600,  inc: 0 },
   { label: "15+10 rápido", sec: 900, inc: 10 },
+  { label: "30+0 clássico", sec: 1800, inc: 0 },
+  { label: "Sem tempo",   sec: null, inc: 0 },
 ];
 
 function formatTC(sec: number | null, inc: number): string {
@@ -127,7 +130,7 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const [botDifficulty, setBotDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [botColor, setBotColor] = useState<"w" | "b" | "random">("w");
   const [creatingBot, setCreatingBot] = useState(false);
-  const [tcIdx, setTcIdx] = useState(3); // default 5+3 blitz
+  const [tcIdx, setTcIdx] = useState(() => TIME_PRESETS.findIndex((p) => p.label.startsWith("5+3"))); // default 5+3 blitz
   const [tcFilter, setTcFilter] = useState<TCCategory>("all");
   const [wagerFilter, setWagerFilter] = useState<WagerFilter>("any");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
