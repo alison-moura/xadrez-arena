@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { LobbyClient } from "./LobbyClient";
 import { formatCoins } from "@/lib/utils";
+import { DailyBonusBanner } from "@/components/DailyBonusBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,7 @@ export default async function LobbyPage() {
 
   return (
     <div className="space-y-4">
+      <DailyBonusBanner />
       {activeTournaments.length > 0 && (
         <div className="space-y-2">
           {activeTournaments.map((t) => (
