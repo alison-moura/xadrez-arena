@@ -72,15 +72,15 @@ export default async function LandingPage() {
         <h2 className="mb-6 text-center text-2xl font-bold">O que tem por aqui</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {[
-            { icon: "⚡", title: "Quick Match",          text: "Encontra um oponente compatível com 1 clique. Bullet, blitz, rápido ou clássico." },
+            { icon: "⚡", title: "Quick Match",          text: "Encontra um oponente compatível com 1 clique. Bullet, blitz, rápido ou clássico — 9 presets de tempo." },
             { icon: "💰", title: "Apostas em escrow",    text: "Pote travado server-side via PL/pgSQL atômico. Vencedor leva, casa fica com 5%." },
             { icon: "🤖", title: "Bot fácil/médio/difícil", text: "Minimax + alpha-beta com peças móveis até depth 4. Treine sem rating." },
-            { icon: "🏆", title: "Torneios arena",       text: "Acumule pontos em uma janela de tempo. Prize pool dividido 60/25/15 entre top 3." },
-            { icon: "📊", title: "Análise Stockfish",    text: "Cada lance avaliado, accuracy %, marcadores de blunder/erro/imprecisão." },
+            { icon: "🧩", title: "Puzzle do Dia",        text: "32 puzzles táticos curados. Streak, favoritos, filtros por rating/tema. Treino diário." },
+            { icon: "🏆", title: "Torneios arena",       text: "Pontue em uma janela de tempo + countdown ao vivo. Prize dividido 60/25/15 entre top 3." },
+            { icon: "📊", title: "Stats + análise",       text: "Dashboard pessoal, breakdown por tempo, sparkline de rating, Stockfish accuracy %." },
             { icon: "🎨", title: "Skins de tabuleiro",   text: "13 skins colecionáveis. Drops por partidas, comprar na loja ou trocar no mercado." },
             { icon: "⚖️", title: "Overwatch anti-cheat", text: "Stockfish flag automático + revisão por jurados da comunidade. Bans automáticos." },
-            { icon: "🔁", title: "Realtime + pré-lance", text: "Supabase Realtime + queue de pré-lances. Sem lag. Som, animações, atalhos." },
-            { icon: "📥", title: "Export PGN",           text: "Baixe qualquer partida em PGN padrão. Compatível com chess.com/lichess." },
+            { icon: "📝", title: "Anotações privadas",   text: "Salva observações por partida no navegador. Página /notes pra revisar tudo." },
           ].map((c) => (
             <div key={c.title} className="card transition-colors hover:border-accent/30">
               <div className="text-2xl">{c.icon}</div>
