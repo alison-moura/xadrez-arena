@@ -60,12 +60,21 @@ class StockfishClient {
    * (positivo = mover está ganhando). Para mate, retorna ±10000.
    */
   async evaluate(fen: string, depth = 12): Promise<EvalResult> {
-    await this.init();
-    if (!this.worker) return { cp: 0, mate: null };
+    const r = await this.evaluateFull(fen, depth);
+    return { cp: r.cp, mate: r.mate };
+  }
 
-    return new Promise<EvalResult>((resolve) => {
+  /**
+   * Como evaluate, mas também retorna o melhor lance em UCI (ex.: "e2e4").
+   */
+  async evaluateFull(fen: string, depth = 12): Promise<EvalResult & { bestUci: string | null }> {
+    await this.init();
+    if (!this.worker) return { cp: 0, mate: null, bestUci: null };
+
+    return new Promise<EvalResult & { bestUci: string | null }>((resolve) => {
       let cp = 0;
       let mate: number | null = null;
+      let bestUci: string | null = null;
 
       const onMsg = (e: MessageEvent) => {
         const line = typeof e.data === "string" ? e.data : "";
@@ -84,8 +93,10 @@ class StockfishClient {
           }
         }
         if (line.startsWith("bestmove")) {
+          const parts = line.split(/\s+/);
+          if (parts[1] && parts[1] !== "(none)") bestUci = parts[1];
           this.worker?.removeEventListener("message", onMsg);
-          resolve({ cp, mate });
+          resolve({ cp, mate, bestUci });
         }
       };
 

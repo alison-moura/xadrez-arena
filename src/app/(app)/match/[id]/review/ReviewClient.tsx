@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { Chess } from "chess.js";
 import Link from "next/link";
 import { getStockfish } from "@/lib/stockfish-client";
+import { downloadPgn } from "@/lib/pgn-export";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -64,6 +65,8 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
   const [error, setError] = useState<string | null>(null);
   const [analyzed, setAnalyzed] = useState(!!match.analyzed_at);
   const [moveCpls, setMoveCpls] = useState<number[] | null>(match.move_cpls ?? null);
+  const [bestArrow, setBestArrow] = useState<[string, string, string] | null>(null);
+  const [showBestArrow, setShowBestArrow] = useState(false);
 
   // PGN → positions array
   const positions = useMemo<string[]>(() => {
@@ -88,6 +91,28 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
   }, [match.pgn]);
 
   useEffect(() => { setPly(positions.length - 1); }, [positions.length]);
+
+  // Computa o melhor lance da posição visível (sob demanda) pra mostrar como seta
+  useEffect(() => {
+    setBestArrow(null);
+    if (!showBestArrow) return;
+    if (ply >= positions.length - 1) return; // posição final, sem "melhor lance"
+    const fen = positions[ply];
+    if (!fen) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sf = getStockfish();
+        await sf.init();
+        const r = await sf.evaluateFull(fen, 12);
+        if (cancelled || !r.bestUci || r.bestUci.length < 4) return;
+        const from = r.bestUci.slice(0, 2);
+        const to   = r.bestUci.slice(2, 4);
+        setBestArrow([from, to, "rgba(80,200,120,0.85)"]);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [ply, positions, showBestArrow]);
 
   // SAN list pareada
   const pairs = useMemo(() => {
@@ -229,7 +254,22 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href={`/match/${match.id}`} className="btn-secondary text-xs">← Voltar à partida</Link>
+          <button
+            onClick={() => downloadPgn({
+              matchId: match.id,
+              pgn: match.pgn,
+              whiteName: match.white_user?.username ?? "?",
+              blackName: match.black_user?.username ?? (isBotMatch ? "Bot" : "?"),
+              whiteRating: match.white_user?.rating,
+              blackRating: match.black_user?.rating,
+              result: match.result,
+              finishedAt: null,
+              timeControlSeconds: null,
+              timeIncrementSeconds: 0,
+            })}
+            className="btn-secondary text-xs"
+          >📥 PGN</button>
+          <Link href={`/match/${match.id}`} className="btn-secondary text-xs">← Partida</Link>
           <Link href="/lobby" className="btn-secondary text-xs">Lobby</Link>
         </div>
       </div>
@@ -257,6 +297,7 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
             arePiecesDraggable={false}
             customDarkSquareStyle={{ backgroundColor: "#3a3a55" }}
             customLightSquareStyle={{ backgroundColor: "#d8d8e5" }}
+            customArrows={(bestArrow ? [bestArrow] : []) as never[]}
             showBoardNotation
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.65)" }}
           />
@@ -284,6 +325,13 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
             </span>
             <button onClick={() => setPly((p) => Math.min(positions.length - 1, p + 1))} disabled={ply >= positions.length - 1} className="rounded border border-border bg-surfaceAlt px-2 py-1 text-xs hover:border-accent/50 disabled:opacity-30">▶</button>
             <button onClick={() => setPly(positions.length - 1)}                                disabled={ply >= positions.length - 1} className="rounded border border-border bg-surfaceAlt px-2 py-1 text-xs hover:border-accent/50 disabled:opacity-30">⏭</button>
+            <button
+              onClick={() => setShowBestArrow((v) => !v)}
+              title="Sugerir melhor lance (Stockfish)"
+              className={`ml-2 rounded border px-2 py-1 text-xs transition-colors ${
+                showBestArrow ? "border-success/60 bg-success/10 text-success" : "border-border bg-surfaceAlt text-muted hover:border-accent/50"
+              }`}
+            >🎯 Dica</button>
           </div>
         </div>
 

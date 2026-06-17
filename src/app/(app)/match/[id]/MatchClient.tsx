@@ -10,6 +10,7 @@ import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { play as playSound, isMuted, setMuted } from "@/lib/sounds";
 import { detectOpening } from "@/lib/openings";
 import { UserPopover } from "@/components/UserPopover";
+import { downloadPgn } from "@/lib/pgn-export";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -41,6 +42,7 @@ type MatchData = {
   draw_offered_by: string | null;
   rematch_offered_by: string | null;
   rematch_match_id: string | null;
+  tournament_id: string | null;
 };
 
 type EarnedAchievement = { id: string; name: string; icon: string; reward_coins: number };
@@ -509,6 +511,19 @@ export function MatchClient({
     }, 1000);
     // som inicial
     playSound("notify");
+
+    // Notificação do sistema (se concedida pelo usuário em /settings)
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      try {
+        const oppName = (myColor === "w" ? match.black_user : match.white_user)?.username;
+        const n = new Notification("Xadrez Arena", {
+          body: oppName ? `É sua vez contra @${oppName}` : "É sua vez de jogar!",
+          icon: "/favicon.ico",
+          tag: `match-${match.id}`,
+        });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch { /* ignore */ }
+    }
     return () => {
       clearInterval(interval);
       if (originalTitleRef.current) document.title = originalTitleRef.current;
@@ -1319,6 +1334,12 @@ export function MatchClient({
                 ⏱ {Math.round((match.time_control_seconds ?? 0) / 60)}{match.time_increment_seconds > 0 ? `+${match.time_increment_seconds}` : ""}
               </span>
             )}
+            {match.tournament_id && (
+              <Link
+                href={`/tournaments/${match.tournament_id}`}
+                className="ml-2 rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] text-accent hover:bg-accent/20"
+              >🏆 Torneio</Link>
+            )}
             {orientationOverride && (
               <span className="ml-2 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">
                 Tabuleiro invertido
@@ -1595,6 +1616,22 @@ export function MatchClient({
               <button onClick={() => copyText(match.pgn || "", "pgn")} className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:border-accent/50 hover:text-accent">
                 {copied === "pgn" ? "✓ PGN" : "PGN"}
               </button>
+              <button
+                title="Baixar PGN"
+                onClick={() => downloadPgn({
+                  matchId: match.id,
+                  pgn: match.pgn,
+                  whiteName: match.white_user?.username ?? "?",
+                  blackName: match.black_user?.username ?? (isBotMatch ? "Bot" : "?"),
+                  whiteRating: match.white_user?.rating,
+                  blackRating: match.black_user?.rating,
+                  result: match.result,
+                  finishedAt: null,
+                  timeControlSeconds: match.time_control_seconds,
+                  timeIncrementSeconds: match.time_increment_seconds,
+                })}
+                className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted transition-colors hover:border-accent/50 hover:text-accent"
+              >📥</button>
             </div>
           </div>
           {fullHistory.length > 0 && (
