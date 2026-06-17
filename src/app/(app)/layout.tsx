@@ -23,6 +23,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .maybeSingle(),
   ]);
 
+  // Heartbeat de presença (atualiza last_seen_at). Não bloqueante.
+  void supabase
+    .from("chess_users")
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq("id", session.user.id);
+
   const balance = wallet?.balance ?? 0;
   const locked = wallet?.locked ?? 0;
   const isAdmin = !!me?.is_admin;

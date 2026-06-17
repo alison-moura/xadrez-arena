@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { formatCoins, formatDate } from "@/lib/utils";
 import { SKIN_DEFS } from "@/lib/skins";
+import { FollowButton } from "./FollowButton";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,32 @@ export default async function PublicProfilePage({ params }: { params: { username
   const skin = SKIN_DEFS[user.equipped_skin_id ?? "classic"] ?? SKIN_DEFS.classic;
   const isMe = session.user.id === user.id;
 
+  // Está seguindo?
+  let alreadyFollowing = false;
+  let followerCount = 0;
+  if (!isMe) {
+    const [{ data: rel }, { count }] = await Promise.all([
+      supabase
+        .from("chess_user_follows")
+        .select("follower_id")
+        .eq("follower_id", session.user.id)
+        .eq("followed_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("chess_user_follows")
+        .select("*", { count: "exact", head: true })
+        .eq("followed_id", user.id),
+    ]);
+    alreadyFollowing = !!rel;
+    followerCount = count ?? 0;
+  } else {
+    const { count } = await supabase
+      .from("chess_user_follows")
+      .select("*", { count: "exact", head: true })
+      .eq("followed_id", user.id);
+    followerCount = count ?? 0;
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -77,7 +104,13 @@ export default async function PublicProfilePage({ params }: { params: { username
               {user.games_played < 10 && <span className="ml-1 text-accent">(provisional)</span>}
               {" · "}{user.games_played} partidas{" · "}desde {formatDate(user.created_at)}
             </div>
+            <div className="mt-1 text-xs text-muted">
+              👥 {followerCount} seguidor{followerCount !== 1 ? "es" : ""}
+            </div>
           </div>
+          {!isMe && !user.is_bot && (
+            <FollowButton userId={user.id} initialFollowing={alreadyFollowing} />
+          )}
         </div>
       </div>
 
