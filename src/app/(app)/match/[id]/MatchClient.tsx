@@ -11,6 +11,7 @@ import { play as playSound, isMuted, setMuted } from "@/lib/sounds";
 import { detectOpening } from "@/lib/openings";
 import { UserPopover } from "@/components/UserPopover";
 import { downloadPgn } from "@/lib/pgn-export";
+import { Confetti } from "@/components/Confetti";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -1177,6 +1178,7 @@ export function MatchClient({
 
   return (
     <div className="grid gap-3 lg:gap-4 lg:grid-cols-[1fr_320px]">
+      <Confetti active={endVisible && match.status === "FINISHED" && iAmInvolved && iWon} />
       {/* Game-over modal */}
       {endVisible && match.status === "FINISHED" && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
