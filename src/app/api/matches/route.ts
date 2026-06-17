@@ -16,6 +16,7 @@ const createSchema = z.object({
   ratingRange:            z.enum(["100", "200", "500", "open"]).optional(),
   timeControlSeconds:     z.number().int().min(30).max(7200).nullable().optional(),
   timeIncrementSeconds:   z.number().int().min(0).max(60).optional(),
+  isPrivate:              z.boolean().optional(),
 });
 
 export async function GET(req: Request) {
@@ -36,6 +37,7 @@ export async function GET(req: Request) {
        black_user:black_user_id(id, username, rating)`
     )
     .eq("status", status)
+    .eq("is_private", false)
     .is("bot_difficulty", null)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
 
-  const { wager, preferredColor, ratingRange, timeControlSeconds, timeIncrementSeconds } = parsed.data;
+  const { wager, preferredColor, ratingRange, timeControlSeconds, timeIncrementSeconds, isPrivate } = parsed.data;
 
   const { data: userRow } = await supabase
     .from("chess_users")
@@ -103,6 +105,7 @@ export async function POST(req: Request) {
     p_rating_max:             ratingMax,
     p_time_control_seconds:   timeControlSeconds ?? null,
     p_time_increment_seconds: timeIncrementSeconds ?? 0,
+    p_is_private:             isPrivate ?? false,
   });
 
   if (error) {

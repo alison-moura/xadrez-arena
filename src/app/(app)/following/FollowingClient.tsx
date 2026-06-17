@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 type Followed = {
   id: string;
@@ -25,9 +26,33 @@ function onlineState(lastSeen: string | null, now: number): { color: string; lab
 }
 
 export function FollowingClient() {
+  const router = useRouter();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  const [challenging, setChallenging] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function challenge() {
+    setChallenging("creating");
+    setError(null);
+    const res = await fetch("/api/matches", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        wager: 0,
+        preferredColor: "random",
+        ratingRange: "open",
+        timeControlSeconds: 300,
+        timeIncrementSeconds: 3,
+        isPrivate: true,
+      }),
+    });
+    const data = await res.json();
+    setChallenging(null);
+    if (!res.ok) { setError(data.error ?? "Erro"); return; }
+    router.push(`/match/${data.matchId}`);
+  }
 
   const load = useCallback(async () => {
     const res = await fetch("/api/following");
@@ -68,7 +93,24 @@ export function FollowingClient() {
           <h1 className="text-2xl font-bold">Seguindo</h1>
           <p className="text-xs text-muted">Status online em tempo quase real (atualiza a cada 30s).</p>
         </div>
-        <Link href="/leaderboard" className="btn-secondary text-xs">Explorar ranking</Link>
+        <div className="flex gap-2">
+          <button onClick={challenge} disabled={!!challenging} className="btn-primary text-xs">
+            {challenging ? "Criando…" : "🔗 Desafiar por link"}
+          </button>
+          <Link href="/leaderboard" className="btn-secondary text-xs">Explorar ranking</Link>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</div>
+      )}
+
+      <div className="card border-accent/30">
+        <h2 className="text-sm font-semibold text-accent">🔗 Desafiar por link</h2>
+        <p className="mt-1 text-xs text-muted">
+          Cria uma partida privada 5+3 sem aposta e te leva pra ela. Depois é só clicar no botão de compartilhar
+          (🔗 no canto da partida) e mandar o link pro amigo.
+        </p>
       </div>
 
       {items.length === 0 ? (

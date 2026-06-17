@@ -104,6 +104,7 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const [tcIdx, setTcIdx] = useState(3); // default 5+3 blitz
   const [tcFilter, setTcFilter] = useState<TCCategory>("all");
   const [quickMatching, setQuickMatching] = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   async function quickMatch() {
     setQuickMatching(true);
@@ -153,6 +154,7 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
         ratingRange,
         timeControlSeconds: tc.sec,
         timeIncrementSeconds: tc.inc,
+        isPrivate,
       }),
     });
     const data = await res.json();
@@ -443,6 +445,16 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
                 ))}
               </div>
             </div>
+
+            <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-border bg-surfaceAlt accent-accent"
+              />
+              <span>🔗 Partida privada (não aparece no lobby — você manda o link pro amigo)</span>
+            </label>
 
             {error && (
               <p className="text-sm text-danger">{error}</p>

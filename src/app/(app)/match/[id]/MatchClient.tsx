@@ -43,6 +43,7 @@ type MatchData = {
   rematch_offered_by: string | null;
   rematch_match_id: string | null;
   tournament_id: string | null;
+  is_private?: boolean;
 };
 
 type EarnedAchievement = { id: string; name: string; icon: string; reward_coins: number };
@@ -1355,6 +1356,11 @@ export function MatchClient({
             {hasClock && (
               <span className="ml-2 rounded-full border border-border bg-surfaceAlt px-2 py-0.5 text-[10px] text-muted">
                 ⏱ {Math.round((match.time_control_seconds ?? 0) / 60)}{match.time_increment_seconds > 0 ? `+${match.time_increment_seconds}` : ""}
+              </span>
+            )}
+            {match.is_private && (
+              <span className="ml-2 rounded-full border border-purple-500/40 bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-300">
+                🔗 Privada
               </span>
             )}
             {match.tournament_id && (
