@@ -147,6 +147,13 @@ export function MatchClient({
   const [now, setNow] = useState(() => Date.now());
   const [promotionPending, setPromotionPending] = useState<{ from: string; to: string } | null>(null);
 
+  // Setas desenhadas pelo usuário (right-click drag)
+  const [userArrows, setUserArrows] = useState<Array<[string, string, string]>>([]);
+  // Estado intermediário do drag de seta atual
+  const [dragArrow, setDragArrow] = useState<{ from: string; to: string } | null>(null);
+  const boardWrapperRef = useRef<HTMLDivElement | null>(null);
+  const draggingArrowRef = useRef<{ from: string | null }>({ from: null });
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
@@ -496,13 +503,78 @@ export function MatchClient({
     return {};
   }, [displayChess]);
 
-  // Setas (último lance) — cast por causa do tipo Square do react-chessboard
+  // Setas combinadas: seta dourada do último lance + setas user-drawn + preview do drag
   const customArrows = useMemo(() => {
+    const arrows: Array<[string, string, string]> = [];
     const moves = displayChess.history({ verbose: true });
     const last = moves[moves.length - 1];
-    if (!last) return [] as unknown[] as never[];
-    return ([[last.from, last.to, "rgba(245,179,1,0.65)"]] as unknown) as never[];
-  }, [displayChess]);
+    if (last) arrows.push([last.from, last.to, "rgba(245,179,1,0.65)"]);
+    for (const a of userArrows) arrows.push(a);
+    if (dragArrow && dragArrow.from !== dragArrow.to) {
+      arrows.push([dragArrow.from, dragArrow.to, "rgba(80,200,120,0.85)"]);
+    }
+    return (arrows as unknown) as never[];
+  }, [displayChess, userArrows, dragArrow]);
+
+  // Computa o square (ex.: "e4") a partir de coords do mouse no container do board
+  function squareAt(clientX: number, clientY: number): string | null {
+    const el = boardWrapperRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const xFrac = (clientX - rect.left) / rect.width;
+    const yFrac = (clientY - rect.top)  / rect.height;
+    if (xFrac < 0 || xFrac > 1 || yFrac < 0 || yFrac > 1) return null;
+    const col = Math.floor(xFrac * 8); // 0..7 da esquerda
+    const row = Math.floor(yFrac * 8); // 0..7 do topo
+    if (col < 0 || col > 7 || row < 0 || row > 7) return null;
+    const file = orientation === "white" ? col : 7 - col;
+    const rank = orientation === "white" ? 8 - row : row + 1;
+    return `${"abcdefgh"[file]}${rank}`;
+  }
+
+  function onBoardMouseDown(e: React.MouseEvent) {
+    if (e.button !== 2) return; // só botão direito inicia seta
+    e.preventDefault();
+    const sq = squareAt(e.clientX, e.clientY);
+    if (!sq) return;
+    draggingArrowRef.current.from = sq;
+    setDragArrow({ from: sq, to: sq });
+  }
+
+  function onBoardMouseMove(e: React.MouseEvent) {
+    if (!draggingArrowRef.current.from) return;
+    const sq = squareAt(e.clientX, e.clientY);
+    if (!sq) return;
+    setDragArrow({ from: draggingArrowRef.current.from, to: sq });
+  }
+
+  function onBoardMouseUp(e: React.MouseEvent) {
+    if (e.button !== 2 || !draggingArrowRef.current.from) return;
+    e.preventDefault();
+    const from = draggingArrowRef.current.from;
+    const to = squareAt(e.clientX, e.clientY);
+    draggingArrowRef.current.from = null;
+    setDragArrow(null);
+    if (!to || to === from) return;
+
+    // Toggle: se já existe seta from→to, remove; senão adiciona
+    setUserArrows((prev) => {
+      const existing = prev.findIndex((a) => a[0] === from && a[1] === to);
+      if (existing >= 0) {
+        const next = [...prev];
+        next.splice(existing, 1);
+        return next;
+      }
+      return [...prev, [from, to, "rgba(80,200,120,0.85)"]];
+    });
+  }
+
+  function onBoardMouseLeave() {
+    if (!draggingArrowRef.current.from) return;
+    draggingArrowRef.current.from = null;
+    setDragArrow(null);
+  }
 
   const customSquareStyles = useMemo(
     () => ({
@@ -912,7 +984,7 @@ export function MatchClient({
                                           setMuted(nv);
                                           setMuteOnState(nv);
                                         }
-      else if (e.key === "Escape")      { setAnnotationStyles({}); clearPremove(); }
+      else if (e.key === "Escape")      { setAnnotationStyles({}); setUserArrows([]); clearPremove(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1189,7 +1261,18 @@ export function MatchClient({
           incrementBump={incrementBump?.color === topColor ? incrementBump : null}
         />
 
-        <div className="relative">
+        {/* Mini barra de material */}
+        <MaterialBar advantage={advantage} orientation={orientation} />
+
+        <div
+          ref={boardWrapperRef}
+          className="relative"
+          onMouseDown={onBoardMouseDown}
+          onMouseMove={onBoardMouseMove}
+          onMouseUp={onBoardMouseUp}
+          onMouseLeave={onBoardMouseLeave}
+          onContextMenu={(e) => e.preventDefault()}
+        >
           <Chessboard
             position={displayFen}
             boardOrientation={orientation}
@@ -1573,6 +1656,35 @@ function PlayerBar({
           <span className="hidden text-xs text-accent sm:block">jogando</span>
         </div>
       )}
+    </div>
+  );
+}
+
+function MaterialBar({ advantage, orientation }: { advantage: number; orientation: "white" | "black" }) {
+  // advantage positivo = brancas à frente; negativo = pretas à frente
+  // max útil ≈ ±20 (rainha + torre + bispo = 17)
+  const MAX = 20;
+  const clamped = Math.max(-MAX, Math.min(MAX, advantage));
+  const whiteFrac = 0.5 + clamped / (MAX * 2); // 0..1
+  // No orientation white: cor branca à esquerda (whiteFrac é o %); preta à direita
+  // Em orientation black: invertemos pra que o lado de cada jogador fique consistente
+  const leftIsWhite = orientation === "white";
+  const leftPct = leftIsWhite ? whiteFrac * 100 : (1 - whiteFrac) * 100;
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <div className="text-[10px] text-muted w-10 text-right">
+        {advantage > 0 ? `+${advantage}` : advantage < 0 ? "" : ""}
+      </div>
+      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-surfaceAlt">
+        <div
+          className="absolute inset-y-0 left-0 bg-white/85 transition-all duration-300"
+          style={{ width: `${leftPct}%` }}
+        />
+        <div className="absolute inset-y-0 left-1/2 w-px bg-muted/40" />
+      </div>
+      <div className="text-[10px] text-muted w-10">
+        {advantage < 0 ? `+${-advantage}` : ""}
+      </div>
     </div>
   );
 }
