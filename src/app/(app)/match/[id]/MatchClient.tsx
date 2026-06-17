@@ -13,6 +13,7 @@ import { UserPopover } from "@/components/UserPopover";
 import { downloadPgn } from "@/lib/pgn-export";
 import { Confetti } from "@/components/Confetti";
 import { endgameCoachTip } from "@/lib/endgame-coach";
+import { MatchNoteCard } from "@/components/MatchNoteCard";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -1738,6 +1739,11 @@ export function MatchClient({
             />
           </div>
         </div>
+
+        {/* Anotação privada (somente após partida terminar) */}
+        {match.status === "FINISHED" && isPlayer && (
+          <MatchNoteCard matchId={match.id} />
+        )}
 
         {/* Chat */}
         {(isPlayer || match.status === "FINISHED") && !isBotMatch && (
