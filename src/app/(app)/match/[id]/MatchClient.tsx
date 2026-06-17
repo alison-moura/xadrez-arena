@@ -12,6 +12,7 @@ import { detectOpening } from "@/lib/openings";
 import { UserPopover } from "@/components/UserPopover";
 import { downloadPgn } from "@/lib/pgn-export";
 import { Confetti } from "@/components/Confetti";
+import { endgameCoachTip } from "@/lib/endgame-coach";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -179,6 +180,7 @@ export function MatchClient({
   const [chatOpen, setChatOpen] = useState(true);
 
   const [pgnIndex, setPgnIndex] = useState<number | null>(null);
+  const [moveTimes, setMoveTimes] = useState<number[] | null>(null);
 
   const chatListRef = useRef<HTMLDivElement>(null);
   const premoveRef = useRef<{ from: string; to: string }[]>([]);
@@ -251,6 +253,23 @@ export function MatchClient({
   useEffect(() => {
     if (isPlayer) setPgnIndex(null);
   }, [match.move_count, isPlayer]);
+
+  // Tempo por lance (carrega quando partida termina)
+  useEffect(() => {
+    if (match.status !== "FINISHED" || moveTimes !== null) return;
+    let cancelled = false;
+    fetch(`/api/matches/${match.id}/moves`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.moves) return;
+        const times = (data.moves as Array<{ ply: number; move_time_ms: number | null }>)
+          .sort((a, b) => a.ply - b.ply)
+          .map((m) => m.move_time_ms ?? 0);
+        setMoveTimes(times);
+      })
+      .catch(() => { /* ignore */ });
+    return () => { cancelled = true; };
+  }, [match.status, match.id, moveTimes]);
 
   // Achievements check
   useEffect(() => {
@@ -1175,6 +1194,12 @@ export function MatchClient({
     if (!iWon && match.wager > 0) return `Você perdeu ${formatCoins(match.wager)} coins.`;
     return null;
   })();
+  const coachTip = useMemo(
+    () => match.status === "FINISHED"
+      ? endgameCoachTip({ result: match.result, finalFen: match.fen, moveCount: match.move_count })
+      : null,
+    [match.status, match.result, match.fen, match.move_count],
+  );
 
   return (
     <div className="grid gap-3 lg:gap-4 lg:grid-cols-[1fr_320px]">
@@ -1212,6 +1237,16 @@ export function MatchClient({
               )}
               {match.winner && !match.result?.includes("DRAW") && (
                 <p className="mt-1 text-xs text-muted">Vencedor: <span className="font-mono">@{match.winner.username}</span></p>
+              )}
+              {coachTip && (
+                <div className="mt-4 rounded-lg border border-accent/25 bg-accent/5 px-3 py-2 text-left">
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-accent">
+                    <span>{coachTip.emoji}</span>
+                    <span className="font-semibold">Dica do coach</span>
+                  </div>
+                  <div className="mt-0.5 text-xs font-medium text-white">{coachTip.title}</div>
+                  <div className="text-[11px] leading-snug text-muted">{coachTip.body}</div>
+                </div>
               )}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-2">
@@ -1699,6 +1734,7 @@ export function MatchClient({
               moveCount={match.move_count}
               currentIndex={isLiveView ? fullHistory.length : pgnIndex ?? 0}
               onClickMove={(idx) => setPgnIndex(idx)}
+              moveTimes={moveTimes}
             />
           </div>
         </div>
@@ -1894,12 +1930,13 @@ function StatusBadge({ status, result }: { status: string; result: string | null
 }
 
 function PgnList({
-  pgn, moveCount, currentIndex, onClickMove,
+  pgn, moveCount, currentIndex, onClickMove, moveTimes,
 }: {
   pgn: string;
   moveCount: number;
   currentIndex: number;
   onClickMove: (index: number) => void;
+  moveTimes?: number[] | null;
 }) {
   const listRef = useRef<HTMLOListElement>(null);
 
@@ -1932,27 +1969,50 @@ function PgnList({
   if (!pgn || pairs.length === 0)
     return <p className="text-xs text-muted">Sem lances ainda.</p>;
 
+  const fmtTime = (ms: number | undefined) => {
+    if (ms == null || ms <= 0) return "";
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+    return `${Math.floor(ms / 60_000)}m${Math.round((ms % 60_000) / 1000)}s`;
+  };
+
   return (
     <ol ref={listRef} className="space-y-0.5 font-mono text-xs">
-      {pairs.map((p) => (
-        <li key={p.num} className="flex gap-2 rounded px-1 py-0.5 hover:bg-surfaceAlt">
-          <span className="w-5 shrink-0 text-muted">{p.num}.</span>
-          <button
-            type="button"
-            onClick={() => p.wIdx && onClickMove(p.wIdx)}
-            className={`w-14 shrink-0 cursor-pointer rounded px-1 text-left ${
-              p.wIdx === currentIndex ? "bg-accent/30 font-bold text-accent" : "hover:bg-accent/10"
-            }`}
-          >{p.w ?? ""}</button>
-          <button
-            type="button"
-            onClick={() => p.bIdx && onClickMove(p.bIdx)}
-            className={`w-14 shrink-0 cursor-pointer rounded px-1 text-left ${
-              p.bIdx === currentIndex ? "bg-accent/30 font-bold text-accent" : "hover:bg-accent/10"
-            }`}
-          >{p.b ?? ""}</button>
-        </li>
-      ))}
+      {pairs.map((p) => {
+        // moveTimes é 0-indexado por ply (ply começa em 1 no DB → index 0)
+        const wTime = p.wIdx != null && moveTimes ? moveTimes[p.wIdx - 1] : undefined;
+        const bTime = p.bIdx != null && moveTimes ? moveTimes[p.bIdx - 1] : undefined;
+        return (
+          <li key={p.num} className="flex items-center gap-1.5 rounded px-1 py-0.5 hover:bg-surfaceAlt">
+            <span className="w-5 shrink-0 text-muted">{p.num}.</span>
+            <button
+              type="button"
+              onClick={() => p.wIdx && onClickMove(p.wIdx)}
+              className={`flex w-14 shrink-0 items-center justify-between rounded px-1 text-left ${
+                p.wIdx === currentIndex ? "bg-accent/30 font-bold text-accent" : "hover:bg-accent/10"
+              }`}
+            >
+              <span>{p.w ?? ""}</span>
+            </button>
+            {wTime !== undefined && wTime > 0 && (
+              <span className="w-9 shrink-0 text-[9px] text-muted/60">{fmtTime(wTime)}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => p.bIdx && onClickMove(p.bIdx)}
+              className={`flex w-14 shrink-0 items-center justify-between rounded px-1 text-left ${
+                p.bIdx === currentIndex ? "bg-accent/30 font-bold text-accent" : "hover:bg-accent/10"
+              }`}
+            >
+              <span>{p.b ?? ""}</span>
+            </button>
+            {bTime !== undefined && bTime > 0 && (
+              <span className="w-9 shrink-0 text-[9px] text-muted/60">{fmtTime(bTime)}</span>
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
