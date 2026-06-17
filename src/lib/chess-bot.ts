@@ -4,7 +4,9 @@ export const BOT_USER_ID = "00000000-0000-0000-0000-0000000000b0";
 
 export type Difficulty = "easy" | "medium" | "hard";
 
-const DEPTH: Record<Difficulty, number> = { easy: 1, medium: 2, hard: 3 };
+// Profundidade do minimax. Depth 4 ainda é rápido com alpha-beta + ordenação,
+// mas joga MUITO melhor que depth 3 (vê combinações simples de 2 jogadas).
+const DEPTH: Record<Difficulty, number> = { easy: 2, medium: 3, hard: 4 };
 
 const PIECE_VALUES: Record<string, number> = {
   p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000,
@@ -170,8 +172,8 @@ export function pickBotMove(fen: string, difficulty: Difficulty): { from: string
   const depth = DEPTH[difficulty];
   const isWhite = chess.turn() === "w";
 
-  // easy: chance de 35% de jogar um lance aleatório (entre os top 5) pra ser beatable
-  if (difficulty === "easy" && Math.random() < 0.35) {
+  // easy: 15% de chance de jogar lance random (era 35% — beatable demais)
+  if (difficulty === "easy" && Math.random() < 0.15) {
     const rnd = moves[Math.floor(Math.random() * moves.length)];
     return { from: rnd.from, to: rnd.to, promotion: rnd.promotion };
   }
@@ -187,9 +189,11 @@ export function pickBotMove(fen: string, difficulty: Difficulty): { from: string
     if (isWhite ? s > bestScore : s < bestScore) bestScore = s;
   }
 
-  // candidatos: lances dentro de 25 cp do melhor (variedade)
+  // Tolerância de variedade depende da dificuldade.
+  // easy aceita até 50cp de imprecisão, hard só joga melhor lance.
+  const tolerance = difficulty === "easy" ? 50 : difficulty === "medium" ? 15 : 0;
   const candidates = scored.filter((x) =>
-    isWhite ? x.s >= bestScore - 25 : x.s <= bestScore + 25
+    isWhite ? x.s >= bestScore - tolerance : x.s <= bestScore + tolerance
   );
   const pick = candidates[Math.floor(Math.random() * candidates.length)].m;
   return { from: pick.from, to: pick.to, promotion: pick.promotion };

@@ -840,7 +840,20 @@ export function MatchClient({
   function submitMove(source: string, target: string, promotion: string): boolean {
     const test = new Chess(match.fen);
     if (match.pgn) { try { test.loadPgn(match.pgn); } catch { /* ignore */ } }
-    try { if (!test.move({ from: source, to: target, promotion: promotion as "q" })) return false; } catch { return false; }
+    let localResult;
+    try { localResult = test.move({ from: source, to: target, promotion: promotion as "q" }); } catch { return false; }
+    if (!localResult) return false;
+
+    // OPTIMISTIC UPDATE: aplica o lance localmente já pra animar a peça.
+    // Sem isso, em partidas vs bot a posição salta direto pra "depois das duas
+    // jogadas" e a animação fica ruim.
+    setMatch((prev) => ({
+      ...prev,
+      fen: test.fen(),
+      pgn: test.pgn(),
+      turn: test.turn(),
+      move_count: prev.move_count + 1,
+    }));
 
     setBusy(true);
     setSendingMove(true);
@@ -854,7 +867,11 @@ export function MatchClient({
       const data = await res.json();
       setBusy(false);
       setSendingMove(false);
-      if (!res.ok) { setError(data.error ?? "Erro no lance"); await refresh(); return; }
+      if (!res.ok) {
+        setError(data.error ?? "Erro no lance");
+        await refresh();
+        return;
+      }
       if (data?.match) setMatch(data.match);
       if (data?.flagged) setError("Tempo esgotou durante o lance.");
     })();
@@ -1364,7 +1381,7 @@ export function MatchClient({
             customSquareStyles={customSquareStyles}
             customArrows={customArrows}
             showBoardNotation={true}
-            animationDuration={150}
+            animationDuration={200}
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.65)" }}
             customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
             customLightSquareStyle={{ backgroundColor: skin.boardLight }}

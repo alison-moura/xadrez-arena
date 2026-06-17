@@ -30,8 +30,8 @@ export async function GET(req: Request) {
     .from("chess_matches")
     .select(
       `id, wager, status, created_at, white_user_id, black_user_id,
-       rating_min, rating_max,
-       time_control_seconds, time_increment_seconds,
+       rating_min, rating_max, fen, turn, move_count,
+       time_control_seconds, time_increment_seconds, white_time_ms, black_time_ms, last_move_at,
        white_user:white_user_id(id, username, rating),
        black_user:black_user_id(id, username, rating)`
     )
