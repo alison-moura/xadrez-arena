@@ -9,6 +9,7 @@ import { SKIN_DEFS, RARITY_COLORS, RARITY_LABELS, type SkinRarity } from "@/lib/
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import { play as playSound, isMuted, setMuted } from "@/lib/sounds";
 import { detectOpening } from "@/lib/openings";
+import { UserPopover } from "@/components/UserPopover";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -154,7 +155,9 @@ export function MatchClient({
   const [pgnIndex, setPgnIndex] = useState<number | null>(null);
 
   const chatListRef = useRef<HTMLDivElement>(null);
-  const premoveRef = useRef<{ from: string; to: string } | null>(null);
+  const premoveRef = useRef<{ from: string; to: string }[]>([]);
+  const premovePendingFromRef = useRef<string | null>(null);
+  const PREMOVE_QUEUE_LIMIT = 3;
   const achievementCheckedRef = useRef(false);
   const dropCheckedRef = useRef(false);
   const busyRef = useRef(busy);
@@ -279,12 +282,12 @@ export function MatchClient({
     if (
       newMatch.status === "ACTIVE" &&
       newMatch.turn === myColor &&
-      premoveRef.current &&
+      premoveRef.current.length > 0 &&
       !busyRef.current
     ) {
-      const pm = premoveRef.current;
-      premoveRef.current = null;
-      setPremoveStyles({});
+      const pm = premoveRef.current[0];
+      premoveRef.current = premoveRef.current.slice(1);
+      renderPremoveStyles();
 
       const test = new Chess(newMatch.fen);
       if (newMatch.pgn) { try { test.loadPgn(newMatch.pgn); } catch { /* ignore */ } }
@@ -302,12 +305,22 @@ export function MatchClient({
             .then(({ ok, d }) => {
               setBusy(false);
               setSendingMove(false);
-              if (!ok) setError(d.error ?? "Pré-lance inválido");
-              else if (d?.match) setMatch(d.match);
+              if (!ok) {
+                setError(d.error ?? "Pré-lance inválido");
+                premoveRef.current = []; // descarta fila inteira em erro
+                renderPremoveStyles();
+              } else if (d?.match) setMatch(d.match);
             })
             .catch(() => { setBusy(false); setSendingMove(false); });
+        } else {
+          // primeiro inválido → descarta tudo
+          premoveRef.current = [];
+          renderPremoveStyles();
         }
-      } catch { /* premove invalid */ }
+      } catch {
+        premoveRef.current = [];
+        renderPremoveStyles();
+      }
     }
   }, [match.id, myColor]);
 
@@ -543,17 +556,38 @@ export function MatchClient({
     setLegalMoveStyles(styles);
   }
 
-  function setPremove(from: string, to: string) {
-    premoveRef.current = { from, to };
-    setPremoveStyles({
-      [from]: { backgroundColor: "rgba(120,80,220,0.45)" },
-      [to]: { backgroundColor: "rgba(120,80,220,0.30)" },
+  function renderPremoveStyles() {
+    const styles: Record<string, React.CSSProperties> = {};
+    premoveRef.current.forEach((pm, idx) => {
+      // primeira casa mais opaca, encadeadas menos
+      const alphaFrom = idx === 0 ? 0.55 : 0.30;
+      const alphaTo   = idx === 0 ? 0.40 : 0.20;
+      styles[pm.from] = { backgroundColor: `rgba(120,80,220,${alphaFrom})` };
+      styles[pm.to]   = { backgroundColor: `rgba(120,80,220,${alphaTo})` };
     });
+    setPremoveStyles(styles);
+  }
+
+  function enqueuePremove(from: string, to: string) {
+    if (premoveRef.current.length >= PREMOVE_QUEUE_LIMIT) return;
+    premoveRef.current = [...premoveRef.current, { from, to }];
+    renderPremoveStyles();
   }
 
   function clearPremove() {
-    premoveRef.current = null;
+    premoveRef.current = [];
     setPremoveStyles({});
+  }
+
+  // Simula a posição após executar todos os pré-lances atuais.
+  // Usado pra validar o próximo pré-lance encadeado sem precisar do servidor.
+  function projectedChess(): Chess {
+    const c = new Chess(match.fen);
+    if (match.pgn) { try { c.loadPgn(match.pgn); } catch { /* ignore */ } }
+    for (const pm of premoveRef.current) {
+      try { c.move({ from: pm.from, to: pm.to, promotion: "q" }); } catch { /* ignore */ }
+    }
+    return c;
   }
 
   // Cycle de anotação numa casa
@@ -576,16 +610,36 @@ export function MatchClient({
     if (!isLiveView) return;
 
     if (!isMyTurn && match.status === "ACTIVE" && isPlayer) {
-      if (premoveRef.current) {
-        const from = premoveRef.current.from;
-        if (from && sq !== from) setPremove(from, sq);
-        else clearPremove();
+      // Fluxo de pré-lance com fila: clica peça (cor projetada) → clica destino
+      const proj = projectedChess();
+      // Estamos no meio de selecionar origem? Usamos premovePendingFromRef
+      const pendingFrom = premovePendingFromRef.current;
+      if (pendingFrom) {
+        if (sq === pendingFrom) { premovePendingFromRef.current = null; renderPremoveStyles(); return; }
+        // Tenta validar o pré-lance projetado
+        try {
+          const test = new Chess(proj.fen());
+          const ok = test.move({ from: pendingFrom, to: sq, promotion: "q" });
+          if (ok) {
+            premovePendingFromRef.current = null;
+            enqueuePremove(pendingFrom, sq);
+          } else {
+            // lance inválido, ignora
+            premovePendingFromRef.current = null;
+            renderPremoveStyles();
+          }
+        } catch {
+          premovePendingFromRef.current = null;
+          renderPremoveStyles();
+        }
         return;
       }
-      const piece = displayChess.get(sq as Parameters<typeof displayChess.get>[0]);
+      // Primeira clique: tem que ser uma peça nossa NA POSIÇÃO PROJETADA
+      const piece = proj.get(sq as Parameters<typeof proj.get>[0]);
       if (piece && piece.color === myColor) {
-        premoveRef.current = { from: sq, to: sq };
-        setPremoveStyles({ [sq]: { backgroundColor: "rgba(120,80,220,0.45)" } });
+        premovePendingFromRef.current = sq;
+        renderPremoveStyles();
+        setPremoveStyles((prev) => ({ ...prev, [sq]: { backgroundColor: "rgba(120,80,220,0.55)" } }));
       }
       return;
     }
@@ -879,7 +933,7 @@ export function MatchClient({
   const bottomIsMe = myColor === bottomColor;
   const topClockMs = topColor === "w" ? liveTimes.w : liveTimes.b;
   const bottomClockMs = bottomColor === "w" ? liveTimes.w : liveTimes.b;
-  const hasPremove = !!premoveRef.current && premoveRef.current.from !== premoveRef.current.to;
+  const hasPremove = premoveRef.current.length > 0;
 
   const topPlaceholder =
     topUser === null
@@ -929,7 +983,7 @@ export function MatchClient({
   })();
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+    <div className="grid gap-3 lg:gap-4 lg:grid-cols-[1fr_320px]">
       {/* Game-over modal */}
       {endVisible && match.status === "FINISHED" && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
@@ -1054,7 +1108,7 @@ export function MatchClient({
       )}
 
       {/* Board column */}
-      <div className="space-y-2">
+      <div className="mx-auto w-full max-w-[min(85vh,100%)] space-y-2 lg:max-w-none">
         <div className="flex items-center justify-between py-1">
           <h1 className="text-sm font-medium text-muted">
             Partida <span className="font-mono text-white">#{match.id.slice(-6)}</span>
@@ -1197,7 +1251,9 @@ export function MatchClient({
 
         {hasPremove && (
           <div className="flex items-center justify-between rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs">
-            <span className="text-purple-300">Pré-lance ativo</span>
+            <span className="text-purple-300">
+              {premoveRef.current.length} pré-lance{premoveRef.current.length > 1 ? "s" : ""} na fila
+            </span>
             <button onClick={clearPremove} className="text-muted hover:text-white">Cancelar</button>
           </div>
         )}
@@ -1414,7 +1470,7 @@ function PlayerBar({
   user, color, isTurn, placeholder, captured, advantage, isMe,
   clockMs, hasClock, isLowTime, incrementBump,
 }: {
-  user: { username: string; rating: number; games_played?: number } | null;
+  user: { id?: string; username: string; rating: number; games_played?: number } | null;
   color: "w" | "b";
   isTurn: boolean;
   placeholder: string;
@@ -1443,7 +1499,13 @@ function PlayerBar({
         <div className="flex items-center gap-1.5">
           {user ? (
             <>
-              <span className="truncate text-sm font-semibold">{isMe ? "Você" : `@${user.username}`}</span>
+              {isMe || !user.id ? (
+                <span className="truncate text-sm font-semibold">{isMe ? "Você" : `@${user.username}`}</span>
+              ) : (
+                <UserPopover userId={user.id}>
+                  <span className="truncate text-sm font-semibold">@{user.username}</span>
+                </UserPopover>
+              )}
               <span className="shrink-0 text-xs text-muted">
                 ({user.rating}{isProvisional && <span className="text-accent">?</span>})
               </span>

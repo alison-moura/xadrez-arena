@@ -32,6 +32,27 @@ function formatTC(sec: number | null, inc: number): string {
   return `${Math.round(sec / 60)}${inc > 0 ? `+${inc}` : ""}`;
 }
 
+type TCCategory = "all" | "bullet" | "blitz" | "rapid" | "classical" | "untimed";
+const TC_CATEGORIES: { value: TCCategory; label: string; emoji: string }[] = [
+  { value: "all",       label: "Todos",     emoji: "•"  },
+  { value: "bullet",    label: "Bullet",    emoji: "⚡" },
+  { value: "blitz",     label: "Blitz",     emoji: "🔥" },
+  { value: "rapid",     label: "Rápido",    emoji: "🏃" },
+  { value: "classical", label: "Clássico",  emoji: "🐢" },
+  { value: "untimed",   label: "Sem tempo", emoji: "∞"  },
+];
+
+function matchTCCategory(sec: number | null, cat: TCCategory): boolean {
+  if (cat === "all") return true;
+  if (cat === "untimed") return sec === null;
+  if (sec === null) return false;
+  if (cat === "bullet")    return sec <= 120;
+  if (cat === "blitz")     return sec > 120 && sec <= 300;
+  if (cat === "rapid")     return sec > 300 && sec <= 1800;
+  if (cat === "classical") return sec > 1800;
+  return true;
+}
+
 function Avatar({ username }: { username: string }) {
   const initials = username.slice(0, 2).toUpperCase();
   const hue = username.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
@@ -81,6 +102,7 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const [botColor, setBotColor] = useState<"w" | "b" | "random">("w");
   const [creatingBot, setCreatingBot] = useState(false);
   const [tcIdx, setTcIdx] = useState(3); // default 5+3 blitz
+  const [tcFilter, setTcFilter] = useState<TCCategory>("all");
 
   async function load() {
     const [w, a] = await Promise.all([
@@ -152,21 +174,53 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
+        {/* Filter pills */}
+        <div className="flex flex-wrap gap-1.5">
+          {TC_CATEGORIES.map((c) => {
+            const count =
+              c.value === "all"
+                ? waiting.length
+                : waiting.filter((m) => matchTCCategory(m.time_control_seconds, c.value)).length;
+            return (
+              <button
+                key={c.value}
+                onClick={() => setTcFilter(c.value)}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                  tcFilter === c.value
+                    ? "border-accent bg-accent text-black font-medium"
+                    : "border-border text-muted hover:border-accent/40 hover:text-white"
+                }`}
+              >
+                {c.emoji} {c.label} <span className="opacity-60">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Waiting */}
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Partidas abertas</h2>
-            <span className="badge text-[10px]">{waiting.length} aguardando</span>
+            <span className="badge text-[10px]">{waiting.filter((m) => matchTCCategory(m.time_control_seconds, tcFilter)).length} aguardando</span>
           </div>
-          {waiting.length === 0 ? (
-            <div className="card flex flex-col items-center gap-2 py-8 text-center text-muted">
-              <span className="text-3xl opacity-30">♟</span>
-              <p className="text-sm">Nenhuma partida aberta.</p>
-              <p className="text-xs">Crie a sua pelo painel ao lado!</p>
-            </div>
-          ) : (
+          {(() => {
+            const filtered = waiting.filter((m) => matchTCCategory(m.time_control_seconds, tcFilter));
+            if (filtered.length === 0) {
+              return (
+                <div className="card flex flex-col items-center gap-2 py-8 text-center text-muted">
+                  <span className="text-3xl opacity-30">♟</span>
+                  <p className="text-sm">
+                    {waiting.length === 0 ? "Nenhuma partida aberta." : "Nenhuma partida nesse formato."}
+                  </p>
+                  <p className="text-xs">
+                    {waiting.length === 0 ? "Crie a sua pelo painel ao lado!" : "Troque o filtro ou crie uma."}
+                  </p>
+                </div>
+              );
+            }
+            return (
             <ul className="space-y-2">
-              {waiting.map((m) => {
+              {filtered.map((m: Match) => {
                 const host = m.white_user ?? m.black_user;
                 const hostColorLabel = m.white_user ? "Brancas" : "Pretas";
                 const joinable = canJoin(m);
@@ -205,7 +259,8 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
                 );
               })}
             </ul>
-          )}
+            );
+          })()}
         </section>
 
         {/* Active */}
