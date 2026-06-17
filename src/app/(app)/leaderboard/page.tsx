@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { auth } from "@/lib/auth";
 
@@ -54,9 +55,12 @@ export default async function LeaderboardPage() {
                 <tr key={p.id} className={isMe ? "bg-accent/5" : ""}>
                   <td className="px-4 py-3 font-semibold text-muted">{i + 1}</td>
                   <td className="px-4 py-3">
-                    <span className={isMe ? "font-semibold text-accent" : ""}>
+                    <Link
+                      href={`/u/${encodeURIComponent(p.username)}`}
+                      className={isMe ? "font-semibold text-accent hover:underline" : "hover:text-accent"}
+                    >
                       @{p.username}
-                    </span>
+                    </Link>
                     {isMe && <span className="ml-1 text-xs text-muted">(você)</span>}
                   </td>
                   <td className="px-4 py-3 text-right font-mono">

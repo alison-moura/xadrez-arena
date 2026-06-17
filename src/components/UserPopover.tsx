@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 type ProfileCard = {
   user: {
@@ -89,7 +90,9 @@ export function UserPopover({
           {data && (
             <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-white">@{data.user.username}</span>
+                <Link href={`/u/${encodeURIComponent(data.user.username)}`} className="font-semibold text-white hover:text-accent">
+                  @{data.user.username}
+                </Link>
                 <span className="text-accent">{data.user.rating} elo</span>
               </div>
               {data.user.is_bot && (
@@ -129,6 +132,9 @@ export function UserPopover({
               ) : (
                 <div className="text-muted">Sem partidas finalizadas ainda.</div>
               )}
+              <Link href={`/u/${encodeURIComponent(data.user.username)}`} className="block text-center text-[10px] text-accent hover:underline">
+                Ver perfil completo →
+              </Link>
             </div>
           )}
         </div>

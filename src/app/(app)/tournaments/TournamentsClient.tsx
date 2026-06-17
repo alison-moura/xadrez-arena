@@ -137,11 +137,11 @@ function TournamentCard({ t, busy, onJoin }: { t: Tournament; busy: boolean; onJ
   const isActive = t.status === "ACTIVE";
   return (
     <div className={`card flex flex-wrap items-center justify-between gap-3 ${isActive ? "border-accent/40" : ""}`}>
-      <div className="flex items-start gap-3 min-w-0 flex-1">
+      <Link href={`/tournaments/${t.id}`} className="flex items-start gap-3 min-w-0 flex-1 group">
         <div className="text-3xl">{isActive ? "🔥" : "🏆"}</div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-semibold">{t.name}</h3>
+            <h3 className="font-semibold group-hover:text-accent transition-colors">{t.name}</h3>
             <span className="badge text-[10px]">⏱ {formatTC(t.time_control_seconds, t.time_increment_seconds)}</span>
             {t.entry_fee > 0 ? (
               <span className="badge text-[10px]">💸 {formatCoins(t.entry_fee)}</span>
@@ -162,7 +162,7 @@ function TournamentCard({ t, busy, onJoin }: { t: Tournament; busy: boolean; onJ
             )}
           </div>
         </div>
-      </div>
+      </Link>
       <div className="flex flex-col items-end gap-1.5">
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-wider text-muted">Prize pool</div>
