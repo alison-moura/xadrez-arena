@@ -53,6 +53,32 @@ function matchTCCategory(sec: number | null, cat: TCCategory): boolean {
   return true;
 }
 
+type WagerFilter = "any" | "free" | "low" | "mid" | "high";
+const WAGER_FILTERS: { value: WagerFilter; label: string }[] = [
+  { value: "any",  label: "Qualquer" },
+  { value: "free", label: "Amistoso" },
+  { value: "low",  label: "≤ 100" },
+  { value: "mid",  label: "100–500" },
+  { value: "high", label: "500+" },
+];
+function matchWagerFilter(w: number, f: WagerFilter): boolean {
+  switch (f) {
+    case "free": return w === 0;
+    case "low":  return w > 0 && w <= 100;
+    case "mid":  return w > 100 && w < 500;
+    case "high": return w >= 500;
+    default:     return true;
+  }
+}
+
+type SortMode = "newest" | "wagerHigh" | "ratingLow" | "ratingHigh";
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "newest",     label: "Mais recentes" },
+  { value: "wagerHigh",  label: "Maior aposta" },
+  { value: "ratingHigh", label: "Maior rating" },
+  { value: "ratingLow",  label: "Menor rating" },
+];
+
 function Avatar({ username }: { username: string }) {
   const initials = username.slice(0, 2).toUpperCase();
   const hue = username.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
@@ -103,6 +129,10 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   const [creatingBot, setCreatingBot] = useState(false);
   const [tcIdx, setTcIdx] = useState(3); // default 5+3 blitz
   const [tcFilter, setTcFilter] = useState<TCCategory>("all");
+  const [wagerFilter, setWagerFilter] = useState<WagerFilter>("any");
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [searchUser, setSearchUser] = useState("");
+  const [onlyJoinable, setOnlyJoinable] = useState(false);
   const [quickMatching, setQuickMatching] = useState(false);
   const [isPrivate, setIsPrivate] = useState(false);
 
@@ -219,6 +249,49 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
           })}
         </div>
 
+        {/* Wager + sort */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1">
+            {WAGER_FILTERS.map((w) => (
+              <button
+                key={w.value}
+                onClick={() => setWagerFilter(w.value)}
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                  wagerFilter === w.value
+                    ? "border-accent bg-accent/20 text-accent"
+                    : "border-border text-muted hover:border-accent/40 hover:text-white"
+                }`}
+              >
+                💰 {w.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1" />
+          <input
+            type="search"
+            placeholder="Buscar @usuário"
+            value={searchUser}
+            onChange={(e) => setSearchUser(e.target.value)}
+            className="input h-7 max-w-[160px] text-xs"
+          />
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="input h-7 max-w-[150px] cursor-pointer text-xs"
+          >
+            {SORT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted">
+            <input
+              type="checkbox"
+              checked={onlyJoinable}
+              onChange={(e) => setOnlyJoinable(e.target.checked)}
+              className="h-3 w-3 accent-accent"
+            />
+            Só joináveis
+          </label>
+        </div>
+
         {/* Waiting */}
         <section>
           <div className="mb-3 flex items-center justify-between">
@@ -226,7 +299,24 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
             <span className="badge text-[10px]">{waiting.filter((m) => matchTCCategory(m.time_control_seconds, tcFilter)).length} aguardando</span>
           </div>
           {(() => {
-            const filtered = waiting.filter((m) => matchTCCategory(m.time_control_seconds, tcFilter));
+            const search = searchUser.trim().toLowerCase().replace(/^@/, "");
+            let filtered = waiting.filter((m) => matchTCCategory(m.time_control_seconds, tcFilter));
+            filtered = filtered.filter((m) => matchWagerFilter(m.wager, wagerFilter));
+            if (search) {
+              filtered = filtered.filter((m) => {
+                const u = (m.white_user ?? m.black_user)?.username?.toLowerCase() ?? "";
+                return u.includes(search);
+              });
+            }
+            if (onlyJoinable) filtered = filtered.filter(canJoin);
+            filtered = [...filtered].sort((a, b) => {
+              switch (sortMode) {
+                case "wagerHigh":  return b.wager - a.wager;
+                case "ratingHigh": return ((b.white_user ?? b.black_user)?.rating ?? 0) - ((a.white_user ?? a.black_user)?.rating ?? 0);
+                case "ratingLow":  return ((a.white_user ?? a.black_user)?.rating ?? 9999) - ((b.white_user ?? b.black_user)?.rating ?? 9999);
+                default:            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+              }
+            });
             if (filtered.length === 0) {
               return (
                 <div className="card flex flex-col items-center gap-2 py-8 text-center text-muted">

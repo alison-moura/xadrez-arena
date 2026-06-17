@@ -46,7 +46,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <NavLinks isAdmin={isAdmin} />
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Saldo compacto no mobile */}
+            <Link
+              href="/wallet"
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs transition-colors hover:border-accent/40 md:hidden"
+              aria-label="Saldo da carteira"
+            >
+              <span className="font-semibold text-accent">{formatCoins(balance)}</span>
+              <span className="text-[9px] text-muted">c</span>
+            </Link>
             <Link
               href="/wallet"
               className="hidden items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm transition-colors hover:border-accent/40 md:inline-flex"
@@ -66,8 +75,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <LogoutButton />
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t border-border px-3 py-2 md:hidden">
+        <nav className="scrollbar-thin relative flex gap-1 overflow-x-auto border-t border-border px-3 py-2 md:hidden">
           <NavLinks mobile isAdmin={isAdmin} />
+          <div className="pointer-events-none sticky right-0 top-0 h-full w-8 shrink-0 bg-gradient-to-l from-background to-transparent" aria-hidden />
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
