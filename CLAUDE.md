@@ -376,6 +376,15 @@ Em `/u/[username]`:
 - **WR por cor**: separa win rate com brancas vs com pretas.
 - Tudo calculado SSR a partir do mesmo query de `chess_matches` já existente.
 
+## /stats — dashboard pessoal
+
+- `src/app/(app)/stats/page.tsx` — SSR.
+- Query: últimas 500 partidas finalizadas do usuário em `chess_matches`.
+- Calcula buckets de tempo (`bucketOf(sec)`): bullet ≤120, blitz ≤300, rapid ≤1800, classical >1800, untimed.
+- Por bucket: W/D/L, total e somatório de rating delta.
+- Mostra: big numbers, breakdown empilhado, sparkline (60 partidas), bar chart de atividade (14 dias), painel vs bot.
+- Não duplica dados do `/u/[username]` — esse foca em perfil público, `/stats` foca em métricas pessoais detalhadas.
+
 ## Achievements: progresso por categoria
 
 `/achievements` mostra um mini-card por categoria com barra de progresso colorida (verde se 100%, dourado caso contrário), antes da grade principal.

@@ -113,6 +113,7 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - **Tempo por lance** exibido na lista após o fim (`/api/matches/[id]/moves` → `PgnList`)
 - **Sparkline de rating** no perfil público (`/u/[username]`) — últimas 30 partidas
 - **Anotação privada** por partida (textarea com auto-save em localStorage, apenas para jogadores em partidas finalizadas)
+- **Dashboard pessoal** `/stats` — big numbers, breakdown por categoria de tempo com W/D/L empilhado, trajetória, atividade dos últimos 14 dias
 
 ### Torneios + Marketplace
 - Torneios estilo arena com leaderboard e prize pool
