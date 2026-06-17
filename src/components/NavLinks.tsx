@@ -9,6 +9,7 @@ const NAV = [
   { href: "/tournaments", label: "Torneios" },
   { href: "/following", label: "Seguindo" },
   { href: "/history", label: "Histórico" },
+  { href: "/notes", label: "Anotações" },
   { href: "/leaderboard", label: "Ranking" },
   { href: "/achievements", label: "Conquistas" },
   { href: "/overwatch", label: "Overwatch" },
