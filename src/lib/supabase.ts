@@ -58,6 +58,10 @@ export function rpcError(err: unknown): string {
     if (msg.includes("cannot_chat_now")) return "Chat indisponível agora";
     if (msg.includes("empty_message")) return "Mensagem vazia";
     if (msg.includes("user_banned")) return "Usuário banido";
+    if (msg.includes("not_challenged_user")) return "Este desafio é endereçado a outro jogador";
+    if (msg.includes("cannot_challenge_self")) return "Você não pode desafiar a si mesmo";
+    if (msg.includes("challenged_not_found")) return "Jogador desafiado não encontrado";
+    if (msg.includes("too_many_pending_challenges")) return "Você já tem desafios pendentes demais para este jogador";
     if (msg.includes("rating_too_low")) return "Seu rating é muito baixo para esta partida";
     if (msg.includes("rating_too_high")) return "Seu rating é muito alto para esta partida";
     if (msg.includes("forbidden")) return "Acesso negado";

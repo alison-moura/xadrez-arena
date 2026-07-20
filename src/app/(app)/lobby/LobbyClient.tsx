@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatCoins, timeAgo } from "@/lib/utils";
+import { ChallengesInbox } from "@/components/ChallengesInbox";
 
 type Match = {
   id: string;
@@ -229,6 +230,9 @@ export function LobbyClient({ viewerRating }: { viewerRating: number }) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
+        {/* Desafios diretos recebidos/enviados */}
+        <ChallengesInbox />
+
         {/* Filter pills */}
         <div className="flex flex-wrap gap-1.5">
           {TC_CATEGORIES.map((c) => {

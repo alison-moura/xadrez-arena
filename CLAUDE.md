@@ -312,6 +312,15 @@ UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
 
 ---
 
+## Desafios diretos (migration 0016)
+
+- `chess_matches.challenged_user_id` — partida endereçada a um usuário; sempre `is_private = true`.
+- `chess_create_match` ganhou `p_challenged_user_id` (valida alvo existe/não banido/não é o próprio; máx. 3 desafios pendentes por par criador→alvo).
+- `chess_join_match`: se `challenged_user_id` setado, só o desafiado entra (erro `not_challenged_user`) e a faixa de rating é ignorada.
+- `chess_decline_challenge(p_user_id, p_match_id)` — desafiado recusa; reembolsa o criador e cancela.
+- API: `POST /api/matches` aceita `challengedUsername`; `GET /api/challenges` retorna `{incoming, outgoing}` pendentes; `POST /api/matches/[id]/decline-challenge`.
+- UI: `ChallengeButton` (perfil `/u/[username]` + `/following`, prop `compact`), `ChallengesInbox` no topo do `LobbyClient` (polling 10s + som "notify" quando chega desafio novo).
+
 ## Notas de implementação
 
 **Polling vs Realtime**: O polling de 1.5s é intencional para simplicidade de deploy (não precisa configurar Supabase Realtime). Para trocar, usar `supabase.channel(...).on('postgres_changes', ...)`.

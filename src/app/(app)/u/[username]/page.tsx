@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { formatCoins, formatDate } from "@/lib/utils";
 import { SKIN_DEFS } from "@/lib/skins";
 import { FollowButton } from "./FollowButton";
+import { ChallengeButton } from "@/components/ChallengeButton";
 import { PuzzleStatsCard } from "@/components/PuzzleStatsCard";
 import { Sparkline } from "@/components/Sparkline";
 
@@ -172,8 +173,11 @@ export default async function PublicProfilePage({ params }: { params: { username
               👥 {followerCount} seguidor{followerCount !== 1 ? "es" : ""}
             </div>
           </div>
-          {!isMe && !user.is_bot && (
-            <FollowButton userId={user.id} initialFollowing={alreadyFollowing} />
+          {!isMe && !user.is_bot && !user.banned_at && (
+            <div className="flex flex-wrap items-start gap-2">
+              <ChallengeButton username={user.username} />
+              <FollowButton userId={user.id} initialFollowing={alreadyFollowing} />
+            </div>
           )}
         </div>
       </div>

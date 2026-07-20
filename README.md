@@ -133,6 +133,8 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 
 ### Social
 - Sistema de seguir (`/following`) + status online
+- **Desafio direto** ⚔️ — desafie qualquer jogador pelo perfil ou pela lista de seguindo (tempo, aposta e cor configuráveis)
+- **Inbox de desafios no lobby**: recebidos (aceitar/recusar com reembolso automático) e enviados (acompanhar/cancelar), com som de notificação
 - Perfil público com stats, conquistas, trajetória, últimas partidas
 - **Insights agregados** no perfil — lances médios, horário mais ativo, WR com brancas vs pretas
 - Bônus diário com streak

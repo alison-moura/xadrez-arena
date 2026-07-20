@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChallengeButton } from "@/components/ChallengeButton";
 
 type Followed = {
   id: string;
@@ -136,12 +137,15 @@ export function FollowingClient() {
                     </div>
                   </div>
                 </Link>
-                <button
-                  onClick={() => unfollow(u.id)}
-                  className="rounded-full border border-border bg-surfaceAlt px-3 py-1 text-xs text-muted hover:border-danger/40 hover:text-danger"
-                >
-                  Deixar de seguir
-                </button>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                  <ChallengeButton username={u.username} compact />
+                  <button
+                    onClick={() => unfollow(u.id)}
+                    className="rounded-full border border-border bg-surfaceAlt px-3 py-1 text-xs text-muted hover:border-danger/40 hover:text-danger"
+                  >
+                    Deixar de seguir
+                  </button>
+                </div>
               </li>
             );
           })}

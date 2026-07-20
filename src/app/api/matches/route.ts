@@ -17,6 +17,7 @@ const createSchema = z.object({
   timeControlSeconds:     z.number().int().min(30).max(7200).nullable().optional(),
   timeIncrementSeconds:   z.number().int().min(0).max(60).optional(),
   isPrivate:              z.boolean().optional(),
+  challengedUsername:     z.string().min(1).max(40).optional(),
 });
 
 export async function GET(req: Request) {
@@ -67,7 +68,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
   }
 
-  const { wager, preferredColor, ratingRange, timeControlSeconds, timeIncrementSeconds, isPrivate } = parsed.data;
+  const { wager, preferredColor, ratingRange, timeControlSeconds, timeIncrementSeconds, isPrivate, challengedUsername } = parsed.data;
+
+  let challengedUserId: string | null = null;
+  if (challengedUsername) {
+    const { data: target } = await supabase
+      .from("chess_users")
+      .select("id, banned_at")
+      .ilike("username", challengedUsername)
+      .single();
+    if (!target) {
+      return NextResponse.json({ error: `Usuário @${challengedUsername} não encontrado` }, { status: 404 });
+    }
+    if (target.banned_at) {
+      return NextResponse.json({ error: "Este usuário está banido" }, { status: 400 });
+    }
+    if (target.id === session.user.id) {
+      return NextResponse.json({ error: "Você não pode desafiar a si mesmo" }, { status: 400 });
+    }
+    challengedUserId = target.id;
+  }
 
   const { data: userRow } = await supabase
     .from("chess_users")
@@ -106,6 +126,7 @@ export async function POST(req: Request) {
     p_time_control_seconds:   timeControlSeconds ?? null,
     p_time_increment_seconds: timeIncrementSeconds ?? 0,
     p_is_private:             isPrivate ?? false,
+    p_challenged_user_id:     challengedUserId,
   });
 
   if (error) {
