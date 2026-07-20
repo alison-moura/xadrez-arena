@@ -16,6 +16,7 @@ import { endgameCoachTip } from "@/lib/endgame-coach";
 import { MatchNoteCard } from "@/components/MatchNoteCard";
 import { getBoardPrefs, animDurationMs } from "@/lib/board-prefs";
 import { getCustomPieces } from "@/lib/piece-sets";
+import { getStockfish } from "@/lib/stockfish-client";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -185,6 +186,11 @@ export function MatchClient({
   const [pgnIndex, setPgnIndex] = useState<number | null>(null);
   const [moveTimes, setMoveTimes] = useState<number[] | null>(null);
   const [boardPrefs, setBoardPrefs] = useState(() => getBoardPrefs());
+
+  // Dica do coach (só vs bot): seta verde do melhor lance via Stockfish WASM
+  const [hintArrow, setHintArrow] = useState<[string, string, string] | null>(null);
+  const [hintLoading, setHintLoading] = useState(false);
+  const [hintsUsed, setHintsUsed] = useState(0);
 
   // Recarrega prefs quando a aba volta a ficar visível (caso usuário tenha mudado em /settings)
   useEffect(() => {
@@ -610,8 +616,28 @@ export function MatchClient({
     if (dragArrow && dragArrow.from !== dragArrow.to) {
       arrows.push([dragArrow.from, dragArrow.to, "rgba(80,200,120,0.85)"]);
     }
+    if (hintArrow) arrows.push(hintArrow);
     return (arrows as unknown) as never[];
-  }, [displayChess, userArrows, dragArrow]);
+  }, [displayChess, userArrows, dragArrow, hintArrow]);
+
+  // Dica some assim que a posição muda
+  useEffect(() => { setHintArrow(null); }, [match.fen]);
+
+  const askHint = useCallback(async () => {
+    if (hintLoading) return;
+    setHintLoading(true);
+    try {
+      const sf = getStockfish();
+      await sf.init();
+      const r = await sf.evaluateFull(match.fen, 12);
+      if (r.bestUci && r.bestUci.length >= 4) {
+        setHintArrow([r.bestUci.slice(0, 2), r.bestUci.slice(2, 4), "rgba(96,165,255,0.9)"]);
+        setHintsUsed((h) => h + 1);
+        playSound("notify");
+      }
+    } catch { /* engine indisponível — silencioso */ }
+    finally { setHintLoading(false); }
+  }, [hintLoading, match.fen]);
 
   // Computa o square (ex.: "e4") a partir de coords do mouse no container do board
   function squareAt(clientX: number, clientY: number): string | null {
@@ -1667,6 +1693,16 @@ ${url}`;
             )}
             {match.status === "ACTIVE" && isPlayer && (
               <>
+                {isBotMatch && (
+                  <button
+                    onClick={askHint}
+                    disabled={hintLoading || !isMyTurn}
+                    title="O coach (Stockfish) mostra o melhor lance com uma seta azul"
+                    className="btn-secondary border-blue-500/40 text-blue-300 hover:border-blue-400"
+                  >
+                    {hintLoading ? "Pensando…" : `💡 Dica do coach${hintsUsed > 0 ? ` (${hintsUsed})` : ""}`}
+                  </button>
+                )}
                 {!isBotMatch && !drawOfferedByMe && !drawOfferedByOpp && (
                   <button onClick={() => drawAction("offer")} disabled={busy} className="btn-secondary">Oferecer empate</button>
                 )}

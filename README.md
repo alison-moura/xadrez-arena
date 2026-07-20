@@ -57,6 +57,7 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - 3 dificuldades: Fácil, Médio, Difícil
 - Algoritmo **minimax + alpha-beta pruning** com tabelas PST
 - Modo treino: sem aposta, sem rating
+- **💡 Dica do coach**: em partidas vs bot, botão que mostra o melhor lance (Stockfish WASM) como seta azul, com contador de dicas usadas
 
 ### UI/UX
 - Dark theme com accent dourado (#f5b301)
