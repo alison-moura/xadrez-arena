@@ -6,18 +6,38 @@ export const dynamic = "force-dynamic";
 
 const PROVISIONAL_THRESHOLD = 10;
 
-export default async function LeaderboardPage() {
+type Category = "geral" | "bullet" | "blitz" | "rapid";
+
+const CATEGORIES: { value: Category; label: string; emoji: string; ratingCol: string; gamesCol: string; desc: string }[] = [
+  { value: "geral",  label: "Geral",  emoji: "🏅", ratingCol: "rating",        gamesCol: "games_played", desc: "Todas as partidas rankeadas" },
+  { value: "bullet", label: "Bullet", emoji: "🚀", ratingCol: "rating_bullet", gamesCol: "games_bullet", desc: "Até 2 minutos" },
+  { value: "blitz",  label: "Blitz",  emoji: "⚡", ratingCol: "rating_blitz",  gamesCol: "games_blitz",  desc: "Até 5 minutos" },
+  { value: "rapid",  label: "Rápido", emoji: "⏱️", ratingCol: "rating_rapid",  gamesCol: "games_rapid",  desc: "Acima de 5 minutos" },
+];
+
+export default async function LeaderboardPage({
+  searchParams,
+}: {
+  searchParams?: { cat?: string };
+}) {
   const session = await auth();
+  const cat = CATEGORIES.find((c) => c.value === searchParams?.cat) ?? CATEGORIES[0];
 
   const { data: users } = await supabase
     .from("chess_users")
-    .select("id, username, rating, games_played, banned_at")
+    .select(`id, username, banned_at, rating:${cat.ratingCol}, games:${cat.gamesCol}`)
     .eq("is_bot", false)
     .is("banned_at", null)
-    .order("rating", { ascending: false })
+    .order(cat.ratingCol, { ascending: false })
     .limit(50);
 
-  const ids = (users ?? []).map((u) => u.id);
+  type Row = { id: string; username: string; rating: number; games: number };
+  // Em categorias específicas, esconde quem nunca jogou nela
+  const rows = ((users ?? []) as unknown as Row[]).filter(
+    (u) => cat.value === "geral" || (u.games ?? 0) > 0
+  );
+
+  const ids = rows.map((u) => u.id);
   const winCount = new Map<string, number>();
   if (ids.length) {
     const { data: wins } = await supabase
@@ -35,7 +55,28 @@ export default async function LeaderboardPage() {
 
   return (
     <div>
-      <h1 className="mb-4 text-2xl font-semibold">Ranking</h1>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">Ranking</h1>
+          <p className="text-xs text-muted">{cat.desc}</p>
+        </div>
+        <div className="flex gap-1.5">
+          {CATEGORIES.map((c) => (
+            <Link
+              key={c.value}
+              href={c.value === "geral" ? "/leaderboard" : `/leaderboard?cat=${c.value}`}
+              className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                cat.value === c.value
+                  ? "border-accent bg-accent font-semibold text-black"
+                  : "border-border text-muted hover:border-accent/40 hover:text-white"
+              }`}
+            >
+              {c.emoji} {c.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
       <div className="card overflow-hidden p-0">
         <table className="w-full text-sm">
           <thead className="bg-surfaceAlt text-left text-xs uppercase tracking-wider text-muted">
@@ -48,12 +89,13 @@ export default async function LeaderboardPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {(users ?? []).map((p, i) => {
-              const isProvisional = (p.games_played ?? 0) < PROVISIONAL_THRESHOLD;
+            {rows.map((p, i) => {
+              const isProvisional = (p.games ?? 0) < PROVISIONAL_THRESHOLD;
               const isMe = p.id === viewerId;
+              const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null;
               return (
                 <tr key={p.id} className={isMe ? "bg-accent/5" : ""}>
-                  <td className="px-4 py-3 font-semibold text-muted">{i + 1}</td>
+                  <td className="px-4 py-3 font-semibold text-muted">{medal ?? i + 1}</td>
                   <td className="px-4 py-3">
                     <Link
                       href={`/u/${encodeURIComponent(p.username)}`}
@@ -73,15 +115,17 @@ export default async function LeaderboardPage() {
                       p.rating
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right text-muted">{p.games_played ?? 0}</td>
+                  <td className="px-4 py-3 text-right text-muted">{p.games ?? 0}</td>
                   <td className="px-4 py-3 text-right">{winCount.get(p.id) ?? 0}</td>
                 </tr>
               );
             })}
-            {(!users || users.length === 0) && (
+            {rows.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                  Sem jogadores ainda.
+                  {cat.value === "geral"
+                    ? "Sem jogadores ainda."
+                    : `Ninguém jogou partidas de ${cat.label} ainda. Seja o primeiro!`}
                 </td>
               </tr>
             )}
@@ -89,7 +133,8 @@ export default async function LeaderboardPage() {
         </table>
       </div>
       <p className="mt-2 text-xs text-muted">
-        <span className="text-accent">?</span> = provisório (menos de {PROVISIONAL_THRESHOLD} partidas)
+        <span className="text-accent">?</span> = provisório (menos de {PROVISIONAL_THRESHOLD} partidas
+        {cat.value !== "geral" ? " na categoria" : ""})
       </p>
     </div>
   );

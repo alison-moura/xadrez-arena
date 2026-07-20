@@ -319,6 +319,14 @@ UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
 - Grupos de navegação são o array `GROUPS` no topo do AppShell — adicionar página nova = adicionar item lá.
 - Carteira, perfil (`/u/<username>`), settings (⚙️) e logout (⏻) ficam no rodapé da sidebar.
 
+## Ratings por categoria (migration 0017)
+
+- `chess_users`: `rating_bullet/blitz/rapid` (default 1500) + `games_bullet/blitz/rapid`.
+- Categorias: bullet ≤120s, blitz ≤300s, rapid >300s (função `chess_time_category`). Sem relógio = sem rating de categoria.
+- Implementado como **trigger** `chess_category_rating_trg` (AFTER UPDATE em chess_matches, dispara na transição pra FINISHED) — não toca nas RPCs; o `rating` geral continua atualizado inline por elas. Mesmo Elo/K-factor (40/20/10 por jogos na categoria).
+- `/leaderboard?cat=bullet|blitz|rapid` — abas; categorias específicas escondem quem tem 0 jogos nela.
+- Perfil `/u/[username]` mostra chips das 3 categorias ("—" se nunca jogou).
+
 ## Desafios diretos (migration 0016)
 
 - `chess_matches.challenged_user_id` — partida endereçada a um usuário; sempre `is_private = true`.

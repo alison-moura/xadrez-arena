@@ -31,6 +31,7 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Pedidos de saque via PIX/USDT/BTC/transferência (registrados como `PENDING` para liquidação manual)
 - Histórico de partidas, transações e saques
 - Ranking de jogadores por rating (atualizado a cada partida finalizada)
+- **Ratings por categoria de tempo** (estilo chess.com): Bullet (≤2min), Blitz (≤5min) e Rápido (>5min) com Elo/K-factor próprios por categoria — abas no `/leaderboard` e chips no perfil público
 
 ### Anti-cheat e matchmaking justo
 - **Faixa de rating obrigatória**: criador define ±200 (Competitivo), ±500 (Relaxado) ou Livre. Jogadores fora do range não podem entrar.

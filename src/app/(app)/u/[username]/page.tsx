@@ -18,7 +18,7 @@ export default async function PublicProfilePage({ params }: { params: { username
   const username = decodeURIComponent(params.username).replace(/^@/, "");
   const { data: user } = await supabase
     .from("chess_users")
-    .select("id, username, rating, games_played, equipped_skin_id, banned_at, is_bot, is_admin, created_at")
+    .select("id, username, rating, games_played, equipped_skin_id, banned_at, is_bot, is_admin, created_at, rating_bullet, rating_blitz, rating_rapid, games_bullet, games_blitz, games_rapid")
     .eq("username", username)
     .maybeSingle();
   if (!user) notFound();
@@ -171,6 +171,23 @@ export default async function PublicProfilePage({ params }: { params: { username
             </div>
             <div className="mt-1 text-xs text-muted">
               👥 {followerCount} seguidor{followerCount !== 1 ? "es" : ""}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {([
+                { emoji: "🚀", label: "Bullet", rating: user.rating_bullet, games: user.games_bullet },
+                { emoji: "⚡", label: "Blitz",  rating: user.rating_blitz,  games: user.games_blitz },
+                { emoji: "⏱️", label: "Rápido", rating: user.rating_rapid,  games: user.games_rapid },
+              ] as const).map((c) => (
+                <span
+                  key={c.label}
+                  title={`${c.label}: ${c.games ?? 0} partida${(c.games ?? 0) === 1 ? "" : "s"}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] ${
+                    (c.games ?? 0) > 0 ? "border-border bg-surfaceAlt text-white" : "border-border/50 text-muted/60"
+                  }`}
+                >
+                  {c.emoji} {c.label} <strong className="font-mono">{(c.games ?? 0) > 0 ? c.rating : "—"}</strong>
+                </span>
+              ))}
             </div>
           </div>
           {!isMe && !user.is_bot && !user.banned_at && (
