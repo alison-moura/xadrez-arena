@@ -580,6 +580,9 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
           </ul>
         </div>
 
+        <Link href="/puzzle-rush" className="btn-primary block py-2 text-center text-xs">
+          ⚡ Puzzle Rush
+        </Link>
         <Link href="/lobby" className="btn-secondary block py-2 text-center text-xs">
           ← Voltar ao lobby
         </Link>

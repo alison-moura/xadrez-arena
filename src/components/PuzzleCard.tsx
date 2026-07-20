@@ -57,6 +57,11 @@ export function PuzzleCard() {
             className="rounded border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-300 transition-colors hover:bg-purple-500/20"
             title="Puzzle aleatório"
           >🎲</Link>
+          <Link
+            href="/puzzle-rush"
+            className="rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent transition-colors hover:bg-accent/20"
+            title="Puzzle Rush — resolva o máximo em 5 minutos"
+          >⚡ Rush</Link>
         </div>
         <span className="text-[10px] text-muted">{state.totalSolved} resolvidos</span>
       </div>

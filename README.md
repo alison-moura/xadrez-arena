@@ -79,6 +79,13 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - **Favoritos ★** (localStorage) + botão **🎲 Aleatório** respeitando filtros
 - Banner no lobby + card de stats no perfil próprio (`/u/[username]`)
 
+### Puzzle Rush ⚡
+- Modo corrida em `/puzzle-rush`: resolva o máximo de puzzles em sequência de dificuldade crescente
+- **2 modos**: 5 minutos contra o relógio ou Sobrevivência (sem tempo)
+- **3 strikes**: lance errado conta strike e pula pro próximo puzzle; 3 erros encerram
+- Recordes por modo + histórico das últimas 10 corridas (localStorage)
+- Grid visual ✓/✗ da corrida atual e overlay de fim com novo recorde
+
 ### Lobby — filtros e busca
 - Categorias por tempo (Bullet/Blitz/Rápido/Clássico/Sem tempo)
 - **Filtro de aposta** (Amistoso, ≤100, 100–500, 500+)
