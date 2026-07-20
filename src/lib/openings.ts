@@ -88,6 +88,32 @@ const RAW: Entry[] = [
 // Ordena por tamanho (mais longo primeiro)
 const ENTRIES = [...RAW].sort((a, b) => b.moves.length - a.moves.length);
 
+export type OpeningEntry = Entry;
+
+// Livro completo (ordem: mais específico primeiro) — usado pelo explorador.
+export const OPENING_BOOK: readonly OpeningEntry[] = ENTRIES;
+
+// Continuações do livro a partir de um histórico: próximo SAN → nome da linha mais profunda.
+export function bookContinuations(history: string[]): { san: string; name: string; depth: number }[] {
+  const out = new Map<string, { name: string; depth: number }>();
+  for (const e of ENTRIES) {
+    if (e.moves.length <= history.length) continue;
+    let ok = true;
+    for (let i = 0; i < history.length; i++) {
+      if (history[i] !== e.moves[i]) { ok = false; break; }
+    }
+    if (!ok) continue;
+    const san = e.moves[history.length];
+    const prev = out.get(san);
+    // ENTRIES vem do mais longo pro mais curto; preferimos o nome mais curto
+    // (mais genérico) como rótulo da continuação imediata.
+    if (!prev || e.moves.length < prev.depth) out.set(san, { name: e.name, depth: e.moves.length });
+  }
+  return Array.from(out.entries())
+    .map(([san, v]) => ({ san, name: v.name, depth: v.depth }))
+    .sort((a, b) => a.depth - b.depth || a.san.localeCompare(b.san));
+}
+
 export function detectOpening(history: string[]): string | null {
   if (!history.length) return null;
   for (const e of ENTRIES) {

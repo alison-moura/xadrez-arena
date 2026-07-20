@@ -87,6 +87,12 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Recordes por modo + histórico das últimas 10 corridas (localStorage)
 - Grid visual ✓/✗ da corrida atual e overlay de fim com novo recorde
 
+### Explorador de Aberturas 📖
+- Página `/openings`: tabuleiro livre (joga pelos dois lados) com nome da linha detectado em tempo real
+- **Continuações do livro** clicáveis a partir da posição atual (~70 linhas ECO em `src/lib/openings.ts`)
+- Lista completa de linhas com busca — clique carrega a sequência no tabuleiro
+- Link "Aberturas" na navegação principal
+
 ### Lobby — filtros e busca
 - Categorias por tempo (Bullet/Blitz/Rápido/Clássico/Sem tempo)
 - **Filtro de aposta** (Amistoso, ≤100, 100–500, 500+)
