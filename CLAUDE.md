@@ -312,6 +312,13 @@ UPDATE chess_users SET is_admin = true WHERE username = 'meunome';
 
 ---
 
+## App shell (sidebar)
+
+- `src/components/AppShell.tsx` — client component único que renderiza sidebar desktop (fixa, w-60, grupos de nav com ícones), topbar+drawer mobile e o `<main>`. Recebe `{ username, balance, locked, isAdmin }` do server layout `(app)/layout.tsx`.
+- `NavLinks.tsx` e `LogoutButton.tsx` foram removidos (substituídos pelo shell).
+- Grupos de navegação são o array `GROUPS` no topo do AppShell — adicionar página nova = adicionar item lá.
+- Carteira, perfil (`/u/<username>`), settings (⚙️) e logout (⏻) ficam no rodapé da sidebar.
+
 ## Desafios diretos (migration 0016)
 
 - `chess_matches.challenged_user_id` — partida endereçada a um usuário; sempre `is_private = true`.

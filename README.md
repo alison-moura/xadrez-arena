@@ -60,8 +60,9 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - **💡 Dica do coach**: em partidas vs bot, botão que mostra o melhor lance (Stockfish WASM) como seta azul, com contador de dicas usadas
 
 ### UI/UX
-- Dark theme com accent dourado (#f5b301)
-- Nav com **link ativo** destacado
+- Dark theme com accent dourado (#f5b301) + fundo com gradientes radiais sutis
+- **Sidebar estilo chess.com** (desktop): navegação agrupada por seção (Jogar / Aprender / Comunidade / Você / Loja) com ícones, link ativo destacado, CTA "▶ Jogar agora", card da carteira e do usuário no rodapé
+- **Mobile**: topbar compacta (menu ☰ + logo + saldo) com drawer lateral deslizante
 - Avatares gerados por iniciais com cor baseada no username
 - Cards de partida com rating ELO e wager colorido por valor
 - Landing page com seção de features e CTA

@@ -8,7 +8,11 @@
 
 html,
 body {
-  background: #0a0a0f;
+  background:
+    radial-gradient(1100px 500px at 85% -10%, rgba(245, 179, 1, 0.05), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(120, 80, 220, 0.05), transparent 60%),
+    #0a0a0f;
+  background-attachment: fixed;
   color: #f1f1f5;
   min-height: 100vh;
 }
@@ -61,16 +65,16 @@ body {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-primary {
-    @apply btn bg-accent text-black hover:bg-accentDark;
+    @apply btn bg-gradient-to-b from-accent to-accentDark text-black shadow-md shadow-accent/20 hover:from-accent hover:to-accent;
   }
   .btn-secondary {
-    @apply btn bg-surfaceAlt border border-border hover:bg-border;
+    @apply btn bg-surfaceAlt border border-border hover:bg-border hover:border-accent/30;
   }
   .btn-danger {
     @apply btn bg-danger/90 text-white hover:bg-danger;
   }
   .card {
-    @apply rounded-xl border border-border bg-surface p-5 shadow-lg;
+    @apply rounded-xl border border-border bg-surface p-5 shadow-lg shadow-black/20 transition-colors;
   }
   .input {
     @apply w-full rounded-lg border border-border bg-surfaceAlt px-3 py-2 text-sm text-white placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
