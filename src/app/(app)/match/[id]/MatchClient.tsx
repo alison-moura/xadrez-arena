@@ -15,6 +15,7 @@ import { Confetti } from "@/components/Confetti";
 import { endgameCoachTip } from "@/lib/endgame-coach";
 import { MatchNoteCard } from "@/components/MatchNoteCard";
 import { getBoardPrefs, animDurationMs } from "@/lib/board-prefs";
+import { getCustomPieces } from "@/lib/piece-sets";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -1521,6 +1522,7 @@ ${url}`;
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.65)" }}
             customDarkSquareStyle={{ backgroundColor: skin.boardDark }}
             customLightSquareStyle={{ backgroundColor: skin.boardLight }}
+            customPieces={getCustomPieces(boardPrefs.pieceSet) as never}
           />
           {!isLiveView && (
             <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-purple-500/80 px-2 py-0.5 text-[10px] font-semibold text-white shadow">

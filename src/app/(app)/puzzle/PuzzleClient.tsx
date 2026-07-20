@@ -7,6 +7,7 @@ import { Chess } from "chess.js";
 import { play as playSound } from "@/lib/sounds";
 import { PUZZLE_BANK, type PuzzleDef, themeLabel } from "@/lib/puzzles";
 import { getBoardPrefs, animDurationMs } from "@/lib/board-prefs";
+import { getCustomPieces } from "@/lib/piece-sets";
 
 const Chessboard = dynamicLoad(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -417,6 +418,7 @@ export function PuzzleClient({ puzzle, dayKey }: { puzzle: PuzzleDef; dayKey: st
             customLightSquareStyle={{ backgroundColor: "#d8d8e5" }}
             showBoardNotation={boardPrefs.showNotation}
             animationDuration={animDurationMs(boardPrefs.animSpeed)}
+            customPieces={getCustomPieces(boardPrefs.pieceSet) as never}
           />
           {status === "wrong" && (
             <div className="pointer-events-none absolute inset-0 animate-pulse rounded-md ring-4 ring-danger/40" />

@@ -112,6 +112,7 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 - Coordenadas a-h/1-8 (on/off)
 - **Velocidade da animação** das peças (Sem / Rápida / Normal / Lenta)
 - Pack de sons (Clássico / Futurista / Suave)
+- **Estilo das peças** (Clássico / Minimal / Neon / Royal) com preview — aplicado em partidas, puzzles e análises (`src/lib/piece-sets.ts`, unicode, zero assets)
 
 ### Histórico, análise e watch
 - Histórico filtrável (vitória/derrota/empate, contra bot, etc.) com paginação

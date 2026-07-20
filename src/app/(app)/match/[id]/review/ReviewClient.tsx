@@ -5,6 +5,7 @@ import { Chess } from "chess.js";
 import Link from "next/link";
 import { getStockfish } from "@/lib/stockfish-client";
 import { downloadPgn } from "@/lib/pgn-export";
+import { getCustomPieces, getPieceSet, type PieceSet } from "@/lib/piece-sets";
 
 const Chessboard = dynamic(() => import("react-chessboard").then((m) => m.Chessboard), {
   ssr: false,
@@ -67,6 +68,8 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
   const [moveCpls, setMoveCpls] = useState<number[] | null>(match.move_cpls ?? null);
   const [bestArrow, setBestArrow] = useState<[string, string, string] | null>(null);
   const [showBestArrow, setShowBestArrow] = useState(false);
+  const [pieceSet, setPieceSetState] = useState<PieceSet>("classic");
+  useEffect(() => { setPieceSetState(getPieceSet()); }, []);
 
   // PGN → positions array
   const positions = useMemo<string[]>(() => {
@@ -328,6 +331,7 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
             customDarkSquareStyle={{ backgroundColor: "#3a3a55" }}
             customLightSquareStyle={{ backgroundColor: "#d8d8e5" }}
             customArrows={(bestArrow ? [bestArrow] : []) as never[]}
+            customPieces={getCustomPieces(pieceSet) as never}
             showBoardNotation
             customBoardStyle={{ borderRadius: "8px", boxShadow: "0 16px 48px rgba(0,0,0,0.65)" }}
           />

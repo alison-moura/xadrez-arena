@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { isMuted, setMuted, getPack, setPack, play as playSound, type SoundPack } from "@/lib/sounds";
 import { ANIM_SPEED_OPTIONS, type AnimSpeed } from "@/lib/board-prefs";
+import { PIECE_SET_OPTIONS, getCustomPieces, getPieceSet, setPieceSet, type PieceSet } from "@/lib/piece-sets";
 
 type NotifPerm = "default" | "granted" | "denied" | "unsupported";
 
@@ -14,6 +15,7 @@ export function SettingsClient() {
   const [autoPromote, setAutoPromote] = useState(false);
   const [showNotation, setShowNotation] = useState(true);
   const [animSpeed, setAnimSpeed] = useState<AnimSpeed>("normal");
+  const [pieceSet, setPieceSetState] = useState<PieceSet>("classic");
 
   useEffect(() => {
     setMutedState(isMuted());
@@ -29,6 +31,7 @@ export function SettingsClient() {
       setShowNotation(localStorage.getItem("xa.showNotation") !== "0");
       const a = localStorage.getItem("xa.animSpeed") as AnimSpeed | null;
       if (a) setAnimSpeed(a);
+      setPieceSetState(getPieceSet());
     } catch { /* ignore */ }
   }, []);
 
@@ -75,6 +78,11 @@ export function SettingsClient() {
   function pickAnimSpeed(v: AnimSpeed) {
     setAnimSpeed(v);
     try { localStorage.setItem("xa.animSpeed", v); } catch { /* ignore */ }
+  }
+
+  function pickPieceSet(v: PieceSet) {
+    setPieceSet(v);
+    setPieceSetState(v);
   }
 
   return (
@@ -184,6 +192,29 @@ export function SettingsClient() {
             ))}
           </div>
           <p className="mt-1 text-[10px] text-muted">Afeta o deslizar das peças no tabuleiro.</p>
+        </div>
+        <div>
+          <div className="mb-1.5 text-sm font-medium">Estilo das peças</div>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            {PIECE_SET_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => pickPieceSet(opt.value)}
+                className={`rounded-lg border px-2 py-2 text-left transition-colors ${
+                  pieceSet === opt.value
+                    ? "border-accent bg-accent/15"
+                    : "border-border hover:border-accent/40"
+                }`}
+              >
+                <PieceSetPreview set={opt.value} />
+                <div className={`mt-1 text-[11px] font-medium ${pieceSet === opt.value ? "text-accent" : "text-white"}`}>
+                  {opt.emoji} {opt.label}
+                </div>
+                <div className="text-[9px] text-muted">{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-muted">Aplicado em partidas, puzzles e análises.</p>
         </div>
       </div>
 
@@ -303,6 +334,36 @@ function BackupRestoreCard() {
           {msg.text}
         </p>
       )}
+    </div>
+  );
+}
+
+// Mini-preview de 4 casas com rei+peão de cada cor no estilo escolhido
+function PieceSetPreview({ set }: { set: PieceSet }) {
+  const pieces = getCustomPieces(set);
+  const cells: { square: "light" | "dark"; piece: string }[] = [
+    { square: "light", piece: "wK" },
+    { square: "dark",  piece: "wP" },
+    { square: "dark",  piece: "bK" },
+    { square: "light", piece: "bP" },
+  ];
+  return (
+    <div className="grid grid-cols-4 overflow-hidden rounded">
+      {cells.map((c, i) => (
+        <div
+          key={i}
+          className="flex aspect-square items-center justify-center"
+          style={{ backgroundColor: c.square === "dark" ? "#3a3a55" : "#d8d8e5" }}
+        >
+          {pieces ? (
+            pieces[c.piece]({ squareWidth: 28 })
+          ) : (
+            <span style={{ fontSize: 20, lineHeight: 1, color: c.piece.startsWith("w") ? "#fff" : "#111", textShadow: c.piece.startsWith("w") ? "0 1px 1px #000" : "0 1px 1px rgba(255,255,255,0.3)" }}>
+              {c.piece.endsWith("K") ? (c.piece.startsWith("w") ? "♔" : "♚") : (c.piece.startsWith("w") ? "♙" : "♟")}
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
