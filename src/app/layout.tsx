@@ -17,11 +17,13 @@ export const metadata: Metadata = {
     description: "Jogue xadrez online com torneios, apostas, análise por Stockfish e skins.",
     type: "website",
     locale: "pt_BR",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Xadrez Arena — Jogue. Aposte. Leve o pote." }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Xadrez Arena",
     description: "Jogue xadrez online com torneios, apostas, análise por Stockfish e skins.",
+    images: ["/og.png"],
   },
 };
 
