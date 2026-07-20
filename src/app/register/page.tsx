@@ -44,9 +44,9 @@ export default function RegisterPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
-        <Link href="/" className="mb-6 inline-flex items-center gap-2 text-muted hover:text-white">
-          <span>♞</span>
-          <span>Xadrez Arena</span>
+        <Link href="/" className="mb-6 inline-flex items-center gap-2.5 hover:opacity-90">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accentDark text-2xl text-black shadow-md shadow-accent/20">♞</span>
+          <span className="text-lg font-extrabold tracking-tight">Xadrez <span className="text-accent">Arena</span></span>
         </Link>
         <div className="card">
           <h1 className="text-2xl font-semibold">Criar conta</h1>

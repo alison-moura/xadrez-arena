@@ -25,9 +25,9 @@ export default async function LandingPage() {
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl text-accent">♞</span>
-            <span className="text-lg font-bold">Xadrez Arena</span>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accentDark text-xl text-black shadow-md shadow-accent/20">♞</span>
+            <span className="text-lg font-extrabold tracking-tight">Xadrez <span className="text-accent">Arena</span></span>
           </div>
           <nav className="flex items-center gap-3">
             <Link href="/login" className="btn-secondary py-1.5 text-sm">Entrar</Link>
@@ -51,7 +51,7 @@ export default async function LandingPage() {
             Leve o pote.
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-base text-muted md:text-lg">
-            Plataforma de xadrez multiplayer com apostas em coins, torneios ao vivo, análise por Stockfish e skins colecionáveis.
+            Plataforma completa de xadrez multiplayer: apostas em coins, ratings por categoria, torneios ao vivo, puzzles, análise por Stockfish e skins colecionáveis.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 md:flex-row">
             <Link href="/register" className="btn-primary px-8 py-3 text-base">Começar agora — é grátis</Link>
@@ -72,15 +72,15 @@ export default async function LandingPage() {
         <h2 className="mb-6 text-center text-2xl font-bold">O que tem por aqui</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {[
-            { icon: "⚡", title: "Quick Match",          text: "Encontra um oponente compatível com 1 clique. Bullet, blitz, rápido ou clássico — 9 presets de tempo." },
-            { icon: "💰", title: "Apostas em escrow",    text: "Pote travado server-side via PL/pgSQL atômico. Vencedor leva, casa fica com 5%." },
-            { icon: "🤖", title: "Bot fácil/médio/difícil", text: "Minimax + alpha-beta com peças móveis até depth 4. Treine sem rating." },
-            { icon: "🧩", title: "Puzzle do Dia",        text: "32 puzzles táticos curados. Streak, favoritos, filtros por rating/tema. Treino diário." },
-            { icon: "🏆", title: "Torneios arena",       text: "Pontue em uma janela de tempo + countdown ao vivo. Prize dividido 60/25/15 entre top 3." },
-            { icon: "📊", title: "Stats + análise",       text: "Dashboard pessoal, breakdown por tempo, sparkline de rating, Stockfish accuracy %." },
-            { icon: "🎨", title: "Skins de tabuleiro",   text: "13 skins colecionáveis. Drops por partidas, comprar na loja ou trocar no mercado." },
-            { icon: "⚖️", title: "Overwatch anti-cheat", text: "Stockfish flag automático + revisão por jurados da comunidade. Bans automáticos." },
-            { icon: "📝", title: "Anotações privadas",   text: "Salva observações por partida no navegador. Página /notes pra revisar tudo." },
+            { icon: "⚡", title: "Quick Match",             text: "Encontre um oponente do seu nível com 1 clique. Bullet, blitz, rápido ou clássico — 9 ritmos de jogo." },
+            { icon: "💰", title: "Apostas em escrow",       text: "O pote fica travado com segurança durante a partida. Vencedor leva, empate devolve tudo." },
+            { icon: "🥇", title: "Ratings por categoria",   text: "Elo separado pra Bullet, Blitz e Rápido, como nos grandes sites. Ranking com abas por ritmo." },
+            { icon: "⚔️", title: "Desafios diretos",        text: "Desafie qualquer jogador pelo perfil. O convite chega no lobby dele com aceitar/recusar." },
+            { icon: "🧩", title: "Puzzle do Dia + Rush",    text: "Tática diária com streak e o modo Rush: resolva o máximo em 5 minutos com 3 vidas." },
+            { icon: "🏆", title: "Torneios arena",          text: "Pontue dentro da janela de tempo com countdown ao vivo. Prêmio dividido entre o top 3." },
+            { icon: "📈", title: "Análise com Stockfish",   text: "Accuracy, erros e blunders lance a lance + gráfico de vantagem clicável após cada partida." },
+            { icon: "📖", title: "Aberturas + coach",       text: "Explorador de aberturas interativo e dica do coach nas partidas de treino contra o bot." },
+            { icon: "🎨", title: "Skins e mercado",         text: "Tabuleiros e peças colecionáveis: drops por partida, loja e mercado de trocas entre jogadores." },
           ].map((c) => (
             <div key={c.title} className="card transition-colors hover:border-accent/30">
               <div className="text-2xl">{c.icon}</div>
