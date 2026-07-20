@@ -239,6 +239,36 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
 
   const currentFen = positions[ply] ?? positions[0];
 
+  // Navegação por teclado (← → Home End)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "ArrowLeft")  { e.preventDefault(); setPly((p) => Math.max(0, p - 1)); }
+      if (e.key === "ArrowRight") { e.preventDefault(); setPly((p) => Math.min(positions.length - 1, p + 1)); }
+      if (e.key === "Home" || e.key === "ArrowUp")   { e.preventDefault(); setPly(0); }
+      if (e.key === "End"  || e.key === "ArrowDown") { e.preventDefault(); setPly(positions.length - 1); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [positions.length]);
+
+  // Curva de vantagem estimada (POV brancas) reconstruída dos CPLs:
+  // cada lance "perde" o CPL do jogador que moveu — aproximação boa o
+  // suficiente pra visualização, sem precisar reavaliar posições.
+  const evalSeries = useMemo<number[] | null>(() => {
+    if (!moveCpls || moveCpls.length === 0) return null;
+    const series: number[] = [20]; // leve vantagem inicial das brancas
+    let e = 20;
+    for (let i = 0; i < moveCpls.length; i++) {
+      const cpl = moveCpls[i] ?? 0;
+      const whiteMoved = i % 2 === 0;
+      e += whiteMoved ? -cpl : cpl;
+      series.push(Math.max(-1000, Math.min(1000, e)));
+    }
+    return series;
+  }, [moveCpls]);
+
   const myColor = match.white_user_id === viewerId ? "w" : match.black_user_id === viewerId ? "b" : null;
   const iWon = match.winner_id === viewerId;
   const isDraw = match.result?.includes("DRAW");
@@ -333,6 +363,15 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
               }`}
             >🎯 Dica</button>
           </div>
+
+          {evalSeries && (
+            <EvalGraph
+              series={evalSeries}
+              cpls={moveCpls ?? []}
+              ply={ply}
+              onSeek={setPly}
+            />
+          )}
         </div>
 
         {/* Sidebar */}
@@ -458,6 +497,83 @@ export function ReviewClient({ match, viewerId }: { match: MatchData; viewerId: 
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+// Gráfico de vantagem estilo chess.com: área acima da linha = brancas melhor.
+// Escala suavizada (sqrt) pra grandes vantagens não achatarem o resto.
+function EvalGraph({
+  series, cpls, ply, onSeek,
+}: {
+  series: number[];
+  cpls: number[];
+  ply: number;
+  onSeek: (ply: number) => void;
+}) {
+  const W = 600;
+  const H = 110;
+  const MID = H / 2;
+  const MAX = 1000;
+
+  const yOf = (cp: number) => {
+    const clamped = Math.max(-MAX, Math.min(MAX, cp));
+    const norm = Math.sign(clamped) * Math.sqrt(Math.abs(clamped) / MAX); // -1..1
+    return MID - norm * (MID - 6);
+  };
+  const xOf = (i: number) => (series.length <= 1 ? 0 : (i / (series.length - 1)) * W);
+
+  const linePoints = series.map((cp, i) => `${xOf(i).toFixed(1)},${yOf(cp).toFixed(1)}`).join(" ");
+  const areaPath = `M0,${MID} L${linePoints.replace(/ /g, " L")} L${W},${MID} Z`;
+
+  function seekFromEvent(e: React.MouseEvent<SVGSVGElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    onSeek(Math.round(frac * (series.length - 1)));
+  }
+
+  return (
+    <div className="card p-3">
+      <div className="mb-1 flex items-center justify-between text-[10px] text-muted">
+        <span>Vantagem estimada (♔ acima · ♚ abaixo)</span>
+        <span className="font-mono">
+          {series[ply] != null ? `${series[ply] > 0 ? "+" : ""}${(series[ply] / 100).toFixed(1)}` : ""}
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="h-24 w-full cursor-crosshair select-none"
+        onClick={seekFromEvent}
+        onMouseMove={(e) => { if (e.buttons === 1) seekFromEvent(e); }}
+      >
+        <rect x={0} y={0} width={W} height={MID} fill="rgba(230,230,240,0.07)" />
+        <rect x={0} y={MID} width={W} height={MID} fill="rgba(0,0,0,0.25)" />
+        <path d={areaPath} fill="rgba(230,230,240,0.35)" stroke="none" />
+        <polyline points={linePoints} fill="none" stroke="rgba(245,179,1,0.9)" strokeWidth={1.5} />
+        <line x1={0} y1={MID} x2={W} y2={MID} stroke="rgba(138,138,163,0.5)" strokeWidth={0.75} strokeDasharray="3 3" />
+        {cpls.map((cpl, i) =>
+          cpl >= 300 ? (
+            <circle
+              key={i}
+              cx={xOf(i + 1)}
+              cy={yOf(series[i + 1] ?? 0)}
+              r={3}
+              fill="#e15252"
+              stroke="#0a0a0f"
+              strokeWidth={1}
+            >
+              <title>Blunder no lance {Math.floor(i / 2) + 1} ({i % 2 === 0 ? "brancas" : "pretas"})</title>
+            </circle>
+          ) : null
+        )}
+        <line
+          x1={xOf(ply)} y1={0} x2={xOf(ply)} y2={H}
+          stroke="rgba(245,179,1,0.8)" strokeWidth={1.25}
+        />
+      </svg>
+      <p className="mt-1 text-[9px] text-muted">
+        Curva reconstruída dos CPLs por lance · clique ou arraste pra navegar · pontos vermelhos = blunders
+      </p>
     </div>
   );
 }

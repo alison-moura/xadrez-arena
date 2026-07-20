@@ -116,6 +116,7 @@ Stack: **Next.js 14 (App Router) + TypeScript + Tailwind + Supabase (Postgres + 
 ### Histórico, análise e watch
 - Histórico filtrável (vitória/derrota/empate, contra bot, etc.) com paginação
 - **Review** com Stockfish (server-side + WASM fallback no browser) — CPL/accuracy por jogador + qualidade por lance
+- **Gráfico de vantagem** no review (estilo chess.com): curva por lance reconstruída dos CPLs, clicável/arrastável pra navegar, blunders marcados em vermelho; navegação também por teclado (← → Home End)
 - Página `/watch` pra assistir partidas ativas, `/overwatch` pra revisar suspeitas
 - **Tempo por lance** exibido na lista após o fim (`/api/matches/[id]/moves` → `PgnList`)
 - **Sparkline de rating** no perfil público (`/u/[username]`) — últimas 30 partidas
